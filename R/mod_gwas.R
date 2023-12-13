@@ -252,53 +252,7 @@ mod_gwas_server <- function(id, base_module){
 
     })
 
-    # # observing the data input select box
-    # observeEvent(input$data_input, {
-    #
-    #   if(input$data_input == "Custom input") {
-    #
-    #     # set random data, activate file input and wait for input data
-    #     exposure_dat(data.table(CHR = rep("6", 10000), BP = sample(1:50000, 10000, replace = FALSE), P = runif(10000)))
-    #     outcome_dat(data.table(CHR = rep("6", 10000), BP = sample(1:50000, 10000, replace = FALSE), P = runif(10000)))
-    #     shinyjs::enable(id="exposure_file")
-    #     shinyjs::enable(id="outcome_file")
-    #
-    #   } else {
-    #
-    #     # use example dataset, disable file input
-    #     shinyjs::disable(id="exposure_file")
-    #     shinyjs::disable(id="outcome_file")
-    #
-    #     # get & set the defaults
-    #     exposure_filepath(     system.file("extdata", DRUG_PROXIES[[input$data_input]]$exposure_file, package="ProxiExplorer"))
-    #     outcome_filepath(      system.file("extdata", DRUG_PROXIES[[input$data_input]]$outcome_file,  package="ProxiExplorer"))
-    #     gene_filepath(         system.file("extdata", DRUG_PROXIES[[input$data_input]]$genes_file,    package="ProxiExplorer"))
-    #     pfile(sub(".pgen", "", system.file("extdata", DRUG_PROXIES[[input$data_input]]$pfile,         package="ProxiExplorer")))
-    #     updateSelectInput(session,     inputId = "gene_chr",       selected = DRUG_PROXIES[[input$data_input]]$gene_chr)
-    #     updateNumericInput(session,    inputId = "gene_flanks_kb", value    = DRUG_PROXIES[[input$data_input]]$gene_flanks_kb)
-    #     updateNumericInput(session,    inputId = "gene_start",     value    = DRUG_PROXIES[[input$data_input]]$gene_start)
-    #     updateNumericInput(session,    inputId = "gene_end",       value    = DRUG_PROXIES[[input$data_input]]$gene_end)
-    #     updateSliderTextInput(session, inputId = "clump_p1",       selected = DRUG_PROXIES[[input$data_input]]$clump_p1)
-    #     updateSliderTextInput(session, inputId = "clump_p2",       selected = DRUG_PROXIES[[input$data_input]]$clump_p2)
-    #     updateSliderTextInput(session, inputId = "clump_r2",       selected = DRUG_PROXIES[[input$data_input]]$clump_r2)
-    #     updateSliderTextInput(session, inputId = "clump_kb",       selected = DRUG_PROXIES[[input$data_input]]$clump_kb)
-    #     if(length(DRUG_PROXIES[[input$data_input]]$qtls)>0) {
-    #       updateSelectInput(session,   inputId = "qtl_source",     selected = "None", choices = c("None", names(DRUG_PROXIES[[input$data_input]]$qtls)))
-    #     }
-    #
-    #
-    #   }
-    # })
-
-
-
 
 
   })
 }
-
-## To be copied in the UI
-# mod_step_ui("step_1")
-
-## To be copied in the server
-# mod_step_server("step_1")

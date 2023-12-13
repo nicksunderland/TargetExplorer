@@ -32,6 +32,11 @@ app_server <- function(input, output, session) {
 
       # add the correct UI type
       insertUI(selector="#add_here", ui=mod_gwas_ui(id=this_id))
+
+    } else if(add_what=="Coloc") {
+
+    } else if(add_what=="MR") {
+
     }
 
     # update the active_modules select box

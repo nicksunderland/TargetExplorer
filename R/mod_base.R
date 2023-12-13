@@ -60,8 +60,3 @@ mod_base_server <- function(id){
   })
 }
 
-## To be copied in the UI
-# mod_base_ui("base_1")
-
-## To be copied in the server
-# mod_base_server("base_1")

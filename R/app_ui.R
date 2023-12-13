@@ -18,7 +18,7 @@ app_ui <- function(request) {
       hr(),
       fluidRow(
         column(6, mod_base_ui(id="base")),
-        column(2, selectInput(inputId="module_type", label="Modules:", choices=c("GWAS","eQTL","Coloc","MR"))),
+        column(2, selectInput(inputId="module_type", label="Modules:", choices=c("GWAS","Coloc","MR"))),
         column(1, actionButton(inputId="add_step", label="Add")),
         column(2, selectInput(inputId="active_modules", label="Current modules:", choices=c(""))),
         column(1, actionButton(inputId="remove_step", label="Remove")),
