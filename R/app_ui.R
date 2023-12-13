@@ -3,17 +3,48 @@
 #' @param request Internal parameter for `{shiny}`.
 #'     DO NOT REMOVE.
 #' @import shiny
+#' @importFrom shinyjs useShinyjs
 #' @noRd
 app_ui <- function(request) {
   tagList(
     # Leave this function for adding external resources
     golem_add_external_resources(),
+    # use shinyjs (for element activation/deactivation things)
+    shinyjs::useShinyjs(),
     # Your application UI logic
     fluidPage(
-      h1("TargetExplorer")
+      h1("TargetExplorer"),
+      p("nicholas.sunderland@bristol.ac.uk"),
+      hr(),
+      fluidRow(
+        column(6, mod_base_ui(id="base")),
+        column(2, selectInput(inputId="module_type", label="Modules:", choices=c("GWAS","eQTL","Coloc","MR"))),
+        column(1, actionButton(inputId="add_step", label="Add")),
+        column(2, selectInput(inputId="active_modules", label="Current modules:", choices=c(""))),
+        column(1, actionButton(inputId="remove_step", label="Remove")),
+        tags$style(type='text/css', "#add_step { width:100%; margin-top: 25px;}"),
+        tags$style(type='text/css', "#remove_step { width:100%; margin-top: 25px;}")
+      ),
+      hr(),
+      div(
+        id = "add_here"
+      )
     )
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #' Add external Resources to the Application
 #'
