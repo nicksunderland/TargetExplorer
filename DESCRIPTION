@@ -5,10 +5,22 @@ Authors@R: person('Nicholas', 'Sunderland', email = 'nicholas.sunderland@bristol
 Description: An Rshiny interface to explore genetically proxied drug targets, with multiple lines of evidence.
 License: MIT + file LICENSE
 Imports: 
+    coloc,
     config (>= 0.3.2),
     data.table,
+    datamods,
+    fst,
+    genepi.utils,
+    ggplot2,
+    ggrepel,
+    glue,
     golem (>= 0.4.1),
-    shiny (>= 1.8.0)
+    httr,
+    jsonlite,
+    shiny (>= 1.8.0),
+    shinyjs,
+    shinyWidgets,
+    yaml
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.2.3

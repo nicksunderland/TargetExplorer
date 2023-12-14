@@ -35,6 +35,13 @@ app_server <- function(input, output, session) {
 
     } else if(add_what=="Coloc") {
 
+      # create the module and add to the list of active modules
+      active_modules$modules[[this_id]] <- mod_coloc_server(id           = this_id,
+                                                           base_module  = active_modules$modules[['base']])
+
+      # add the correct UI type
+      insertUI(selector="#add_here", ui=mod_coloc_ui(id=this_id))
+
     } else if(add_what=="MR") {
 
     }

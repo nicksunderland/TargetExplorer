@@ -41,28 +41,30 @@ mod_gwas_ui <- function(id){
                                                         label   = "Clump data")),
                                ),
                                fluidRow(
-                                 column(6, sliderTextInput(inputId  = ns("clump_p1"),
-                                                           label    = "p1",
-                                                           choices  = c(5e-8,5e-6,5e-4,0.01,0.05,0.1,0.5,1.0),
-                                                           selected = 5e-8,
-                                                           grid     = TRUE)),
-                                 column(6, sliderTextInput(inputId  = ns("clump_p2"),
-                                                           label    = "p2",
-                                                           choices  = c(5e-8,5e-6,5e-4,0.01,0.05,0.1,0.5,1.0),
-                                                           selected = 1.0,
-                                                           grid     = TRUE))
-                               ),
-                               fluidRow(
-                                 column(6, sliderTextInput(inputId  = ns("clump_r2"),
-                                                           label    = "r2",
-                                                           choices  = c(0.0001,0.001,0.01,seq(0.1,1,0.1)),
-                                                           selected = 0.001,
-                                                           grid     = TRUE)),
-                                 column(6, sliderTextInput(inputId  = ns("clump_kb"),
-                                                           label    = "kb",
-                                                           choices  = seq(0,1000,50),
-                                                           selected = 250,
-                                                           grid     = TRUE))
+                                 column(6,
+                                        sliderTextInput(inputId  = ns("clump_p1"),
+                                                        label    = "p1",
+                                                        choices  = c(5e-8,5e-6,5e-4,0.01,0.05,0.1,0.5,1.0),
+                                                        selected = 5e-8,
+                                                        grid     = TRUE),
+                                        sliderTextInput(inputId  = ns("clump_r2"),
+                                                        label    = "r2",
+                                                        choices  = c(0.0001,0.001,0.01,seq(0.1,1,0.1)),
+                                                        selected = 0.001,
+                                                        grid     = TRUE)
+                                        ),
+                                 column(6,
+                                        sliderTextInput(inputId  = ns("clump_p2"),
+                                                        label    = "p2",
+                                                        choices  = c(5e-8,5e-6,5e-4,0.01,0.05,0.1,0.5,1.0),
+                                                        selected = 1.0,
+                                                        grid     = TRUE),
+                                        sliderTextInput(inputId  = ns("clump_kb"),
+                                                        label    = "kb",
+                                                        choices  = seq(0,1000,50),
+                                                        selected = 250,
+                                                        grid     = TRUE)
+                                        )
                                ),
                   ), # sidebar panel end
                   mainPanel(width = 9,
@@ -86,6 +88,8 @@ mod_gwas_server <- function(id, base_module){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
+    # R CMD checks
+    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- NULL
 
     # reactive values for the GWAS module
     v <- reactiveValues(
