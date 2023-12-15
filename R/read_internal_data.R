@@ -23,32 +23,33 @@ get_data_directory <- function(type=NULL) {
 }
 
 
-get_available_data_sources <- function(type) {
+get_available_data_sources <- function() {
 
-  if(type=="gwas"){
+  source_info <- data.frame(catalogue=character(), dataset=character(), path=character())
 
-    # the each source is a directory containing the gwas file split into chromosomes (e.g. ".../hba1c_jurgens2022/chr1.RDS")
-    sources <- list.files(get_data_directory(type), full.names=TRUE, recursive=FALSE)
-    names(sources) <- list.files(get_data_directory(type), full.names=FALSE, recursive=FALSE)
-    return(sources)
+  for(type in c("gwas","eqtl","pqtl","genes")) {
 
-  } else if(type=="eqtl") {
-    # TODO
-  } else if(type=="pqtl") {
-    # TODO
+    s <- data.frame(path      = list.files(get_data_directory(type), full.names=TRUE,  recursive=FALSE),
+                    dataset   = list.files(get_data_directory(type), full.names=FALSE, recursive=FALSE))
+
+    if(nrow(s)>0) {
+      s$catalogue <- type
+      source_info <- rbind(source_info, s)
+    }
+
   }
 
-
+  return(source_info)
 }
 
 
-read_internal_data <- function(type, source, chrom, start, end) {
+read_internal_data <- function(type, dataset, chrom, start, end) {
 
   # data directory
   data_dir <- get_data_directory(type)
 
   # the data source files
-  source_dir <- file.path(data_dir, source)
+  source_dir <- file.path(data_dir, dataset)
 
   # file path
   source_file <- file.path(source_dir, paste0("chr",chrom,".fst"))
@@ -64,6 +65,9 @@ read_internal_data <- function(type, source, chrom, start, end) {
 
   # read the needed rows
   d <- chr_fst[row_idxs, ]
+
+  # standardise data.frame
+  d <- standardise_data(d, source="internal")
 
   return(d)
 }

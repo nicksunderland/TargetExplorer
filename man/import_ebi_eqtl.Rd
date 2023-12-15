@@ -45,5 +45,10 @@ import_ebi_eqtl(
 a data.frame
 }
 \description{
-Import EBI eQTL data
+A function to download from the EBI eQTL API
+Note that there is some unexpected behaviour with the version2 filtering.
+I thought that filtering by position and gene would be an `&` operation,
+but it seems to be an `|` combination as when used together you get gene
+eQTLs from way outside your specified region. Therefore I do the gene
+filtering after.
 }

@@ -1,4 +1,12 @@
 #' @title Import EBI eQTL data
+#' @description
+#' A function to download from the EBI eQTL API
+#' Note that there is some unexpected behaviour with the version2 filtering.
+#' I thought that filtering by position and gene would be an `&` operation,
+#' but it seems to be an `|` combination as when used together you get gene
+#' eQTLs from way outside your specified region. Therefore I do the gene
+#' filtering after.
+#'
 #' @param study_info_table .
 #' @param studies .
 #' @param tissues .
@@ -30,23 +38,27 @@ import_ebi_eqtl <- function(study_info_table,
   # checks
   build <- match.arg(build, choices = c("GRCh37","GRCh38"))
 
+  # lift position if needed
+  if(build=="GRCh37") {
+    pos_df <- data.frame(RSID=c("rs1","rs2"), CHR=c(chr,chr), BP=c(bp_start, bp_end))
+    pos_df <- genepi.utils::lift(pos_df, from="Hg19", to="Hg38", snp_col="RSID", chr_col="CHR", pos_col="BP", remove_duplicates = FALSE)
+    bp_start <- pos_df[1, ][["BP"]]
+    bp_end   <- pos_df[2, ][["BP"]]
+  }
+
   # work out which datasets we need to query
-  dataset_ids <- study_info_table[study_info_table$study_label  %in% studies &
-                                  study_info_table$tissue_label %in% tissues &
+  dataset_ids <- study_info_table[study_info_table$catalogue  %in% studies &
+                                  study_info_table$dataset %in% tissues &
                                   study_info_table$quant_method=="ge", # TODO: not sure about this restriction/filter at the minute...
-                                  c("dataset_id","study_label","tissue_label")]
+                                  c("dataset_id","catalogue","dataset")]
   dataset_ids <- unique(dataset_ids)
 
-  # set up parameters
-
+  # set up parameters - only done position and pvalue filtering for now
   parameters = list('pos'        = ifelse(all(!sapply(list(chr,bp_start,bp_end), is.null)), glue("{chr}:{bp_start}-{bp_end}"), ""),
-                    'variant'    = cptid,
-                    'rsid'       = rsid,
-                    'gene_id'    = gene_id,
                     'nlog10p'    = nlog10p)
 
   # df to add results to
-  data_out <- data.frame()
+  data_out <- data.table::data.table()
 
   shiny::withProgress(message = 'Querying EBI eQTL API', value = 0, {
     n <- nrow(dataset_ids)*2
@@ -65,10 +77,14 @@ import_ebi_eqtl <- function(study_info_table,
 
         #Adding defined parameters to the request
         for (i in 1:length(parameters)) {
-          if(!is.null(parameters[[i]])) {
+          if(is.null(parameters[[i]]) || parameters[[i]]=="") {
+            URL = URL
+          } else {
             URL = glue::glue("{URL}&{names(parameters[i])}={parameters[[i]]}")
           }
         }
+
+        print(URL)
 
         # send the request
         r <- httr::GET(URL, httr::accept_json())
@@ -78,7 +94,7 @@ import_ebi_eqtl <- function(study_info_table,
         if (httr::status_code(r) != 200) {
           #If we get no results at all, print error
           if (start == 0) {
-            print(glue::glue("Error {status_code(r)}"))
+            print(glue::glue("Error {httr::status_code(r)}"))
             print(cont)
             return ()
           }
@@ -90,7 +106,7 @@ import_ebi_eqtl <- function(study_info_table,
         cont_df <- jsonlite::fromJSON(cont)
 
         if (start == 0) {
-          responses <- cont_df
+          responses <- data.table::data.table(cont_df)
         } else {
           responses <- rbind(responses, cont_df)
         }
@@ -98,8 +114,8 @@ import_ebi_eqtl <- function(study_info_table,
       }
 
       # add dataset info to the table
-      responses$study_label  <- dataset_ids[dataset_ids$dataset_id==id, "study_label"]
-      responses$tissue_label <- dataset_ids[dataset_ids$dataset_id==id, "tissue_label"]
+      responses[, STUDY  := dataset_ids[dataset_ids$dataset_id==id, "catalogue"]]
+      responses[, TISSUE := dataset_ids[dataset_ids$dataset_id==id, "dataset"]]
 
       # add to the main table
       data_out <- rbind(data_out, responses)
@@ -111,42 +127,28 @@ import_ebi_eqtl <- function(study_info_table,
 
   }) # end withProgress
 
+  # No data found, return null
+  if(nrow(data_out)==0) return(NULL)
 
+  # calculate N as allele number / 2
+  data_out[, N := ceiling(an/2)]
 
-  # standardise naming
+  # see description...
+  if(!is.null(gene_id)) {
+    data_out <- data_out[gene_id==gene_id, ]
+  }
 
-
-
-  # lift to build 37 if needed as EBI catalogue is build 38
+  # standardise
   if(build=="GRCh37") {
-    data_out <- genepi.utils::lift(data_out, from="Hg38", to="Hg19",
-                                   snp_col="rsid", chr_col="chromosome", pos_col="position", ea_col="alt", oa_col="ref",
-                                   remove_duplicates = FALSE)
+    data_out <- standardise_data(data_out, source="ebi_eqtl_api", build_from="Hg38", build_to="Hg19")
+  } else if(build=="GRCh38") {
+    data_out <- standardise_data(data_out, source="ebi_eqtl_api", build_from=NULL, build_to=NULL)
   }
 
   # return the data
   return(data_out)
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -172,6 +174,10 @@ get_ebi_study_info <- function() {
     # get the content
     cont <- httr::content(r, "text", encoding = "UTF-8")
     df <- jsonlite::fromJSON(cont)
+
+    # standardise names
+    names(df)[names(df)=="study_label"] <- "catalogue"
+    names(df)[names(df)=="tissue_label"] <- "dataset"
 
     # return
     return(df)

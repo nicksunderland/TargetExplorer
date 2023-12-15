@@ -17,11 +17,11 @@ app_ui <- function(request) {
       p("nicholas.sunderland@bristol.ac.uk"),
       hr(),
       fluidRow(
-        column(6, mod_base_ui(id="base")),
-        column(2, selectInput(inputId="module_type", label="Modules:", choices=c("GWAS","Coloc","MR"))),
-        column(1, actionButton(inputId="add_step", label="Add")),
-        column(2, selectInput(inputId="active_modules", label="Current modules:", choices=c(""))),
-        column(1, actionButton(inputId="remove_step", label="Remove")),
+        column(8, mod_gene_ui(id="gene")),
+        column(1, selectInput(inputId="module_type", label="Modules", choices=c("GWAS","Coloc","MR"))),
+        column(1, actionButton(inputId="add_step", width = "40px", label = "", icon = icon("plus"))),
+        column(1, selectInput(inputId="active_modules", label="Active:", choices=c(""))),
+        column(1, actionButton(inputId="remove_step", width = "40px", label = "", icon = icon("trash-can"))),
         tags$style(type='text/css', "#add_step { width:100%; margin-top: 25px;}"),
         tags$style(type='text/css', "#remove_step { width:100%; margin-top: 25px;}")
       ),

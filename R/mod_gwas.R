@@ -13,27 +13,10 @@ mod_gwas_ui <- function(id){
   div(
     id = id,
     sidebarLayout(position = "right",
-                  sidebarPanel(p(strong("Controls")),
+                  sidebarPanel(p(strong(paste0("Controls [",id,"]"))),
                                width = 3,
                                hr(),
-                               fluidRow(
-                                 column(6, selectInput(inputId  = ns("data_source"),
-                                                       label    = "Data source",
-                                                       choices  = c("", "file input"),
-                                                       selected = "")),
-                                 column(6, fileInput(inputId = ns("gwas_file"),
-                                                     label   = "File",
-                                                     buttonLabel = "file path...")),
-                               ),
-                               fluidRow(
-                                 column(8, prettyRadioButtons(inputId = ns("gwas_type"),
-                                                              label   = "Type",
-                                                              choices = c("Exposure", "Outcome"),
-                                                              inline  = TRUE)),
-                                 column(4, actionButton(inputId = ns("import"),
-                                                        label   = "Import")),
-                                 tags$style(type='text/css', paste0("#",ns("import")," { width:100%; margin-top: 25px;}"))
-                               ),
+                               mod_data_ui(id=ns("data")),
                                hr(),
                                fluidRow(
                                  column(6, p(strong("Clumping"))),
@@ -84,67 +67,70 @@ mod_gwas_ui <- function(id){
 #' gwas Server Functions
 #' @import ggplot2 ggrepel
 #' @noRd
-mod_gwas_server <- function(id, base_module){
+mod_gwas_server <- function(id, app){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
     # R CMD checks
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- NULL
 
-    # reactive values for the GWAS module
-    v <- reactiveValues(
-      genes = NULL
-    )
+    #==========================================
+    # Data module server for the GWAS module
+    #==========================================
+    data_mod <- mod_data_server(id="data", app$modules$gene)
 
 
-    # MAIN LOCUS OUTPUT PLOT
+    #==========================================
+    # Manhattan / LocusZoom plot
+    #==========================================
     output$locus_plot <- renderPlot({
 
       # check data
       validate(
-        need(!is.null(base_module$data), 'No data imported, click the import button')
+        need(!is.null(data_mod$data), 'No data imported, click the import button')
       )
 
       # colours
       color_list = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
 
       # create the locus plot
-      p <- ggplot(data    = base_module$data,
-                  mapping = aes(x=BP, y=log10P)) +
+      p <- ggplot(data    = data_mod$data,
+                  mapping = aes(x=BP, y=nlog10P)) +
+        geom_hline(yintercept=7.3, linetype="dotted", color="lightgrey") +
         geom_point(color="lightgray") +
-        annotate(geom = "rect", xmin=base_module$gene_start, xmax=base_module$gene_end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05) +
+        annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05) +
         theme_classic() +
-        lims(x = c(base_module$gene_start - base_module$gene_flanks_kb*1000, base_module$gene_end + base_module$gene_flanks_kb*1000)) +
-        labs(x        = paste0("Chromosome ", base_module$gene_chr, " position"),
-             y        = expression(paste("-log"[10], plain(P))),
-             subtitle = paste0(input$gwas_type, ": ", input$data_source))
+        lims(x = c(app$modules$gene$start - app$modules$gene$flanks_kb*1000, app$modules$gene$end + app$modules$gene$flanks_kb*1000),
+             y = c(-2.5, max(8.0, max(data_mod$data$nlog10P)))) +
+        labs(x        = paste0("Chromosome ", app$modules$gene$chr, " position"),
+             y        = expression(paste("-log"[10], plain(P))))
 
       # if gene data then add
-      if(!is.null(v$genes)) {
+      if(!is.null(data_mod$data2)) {
         p <- p +
           geom_hline(yintercept = 0) +
-          geom_rect(data = v$genes[v$genes$STRAND=="+",  ],
+          geom_rect(data = data_mod$data2[data_mod$data2$STRAND=="+",  ],
                     inherit.aes=FALSE,
                     mapping = aes(xmin=BP_START, xmax=BP_END, ymin=-1.75, ymax=-1.25), fill="grey", alpha=0.3) +
-          geom_rect(data = v$genes[v$genes$STRAND=="-",  ],
+          geom_rect(data = data_mod$data2[data_mod$data2$STRAND=="-",  ],
                     inherit.aes=FALSE,
                     mapping = aes(xmin=BP_START, xmax=BP_END, ymin=-2.5, ymax=-2), fill="grey", alpha=0.3) +
-          geom_text_repel(data = v$genes[v$genes$STRAND=="-",  ],
+          geom_text_repel(data = data_mod$data2[data_mod$data2$STRAND=="-",  ],
                           mapping = aes(label = GENE_NAME, x=(BP_END-BP_START)/2 + BP_START, y =-2.25),
                           direction = "x", min.segment.length = 0.25) +
-          geom_text_repel(data = v$genes[v$genes$STRAND=="+",  ],
+          geom_text_repel(data = data_mod$data2[data_mod$data2$STRAND=="+",  ],
                           mapping = aes(label = GENE_NAME, x=(BP_END-BP_START)/2 + BP_START, y =-1.5),
                           direction = "x", min.segment.length = 0.25)
       }
 
       # if there is clumped data, plot
-      if(all(c("index","clump") %in% colnames(base_module$data))) {
+      if(all(c("index","clump") %in% colnames(data_mod$data))) {
         p <- p +
-          geom_point(data = base_module$data[!is.na(base_module$data$clump), ],            mapping = aes(x=BP, y=log10P, color=clump, fill=clump), shape=23) +
-          geom_vline(data = base_module$data[which(base_module$data$index==TRUE), ],       mapping = aes(xintercept=BP), linetype="dotted", color="darkred") +
-          geom_point(data = base_module$data[which(base_module$data$index==TRUE), ],       mapping = aes(x=BP, y=log10P), size=3, fill="red", color="red", shape=24) +
-          geom_label(data = base_module$data[which(base_module$data$index==TRUE), ],       mapping = aes(label=clump, x=BP, y=-0.5)) +
-          geom_label_repel(data = base_module$data[which(base_module$data$index==TRUE), ], mapping = aes(label=RSID,  x=BP, y=log10P)) +
+          geom_point(data = data_mod$data[!is.na(data_mod$data$clump), ],            mapping = aes(x=BP, y=nlog10P, color=clump, fill=clump), shape=23) +
+          geom_vline(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(xintercept=BP), linetype="dotted", color="darkred") +
+          geom_point(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(x=BP, y=nlog10P), size=3, fill="red", color="red", shape=24) +
+          geom_label(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(label=clump, x=BP, y=-0.5)) +
+          geom_label_repel(data = data_mod$data[which(data_mod$data$index==TRUE), ], mapping = aes(label=RSID,  x=BP, y=nlog10P)) +
           labs(color = "Clump", fill = "Clump")
       }
 
@@ -152,14 +138,16 @@ mod_gwas_server <- function(id, base_module){
     })
 
 
-    # Table for brushed (selected) locus plot points
+    #==========================================
+    # Point select table - for brushed point
+    #==========================================
     output$locus_plot_table <- renderTable({
       tryCatch({
-        bp <- brushedPoints(base_module$data, input$locus_plot_brush)
-        if(nrow(bp)==0 && !is.null(v$genes)) {
-          bp <- v$genes[(input$locus_plot_brush$xmin < v$genes$BP_START) & (input$locus_plot_brush$xmax > v$genes$BP_END) &
-                        ((input$locus_plot_brush$ymin < -1.75 & input$locus_plot_brush$ymax > -1.25 & v$genes$STRAND=="+") |
-                         (input$locus_plot_brush$ymin < -2.50 & input$locus_plot_brush$ymax > -2.00 & v$genes$STRAND=="-")), ]
+        bp <- brushedPoints(data_mod$data, input$locus_plot_brush)
+        if(nrow(bp)==0 && !is.null(data_mod$data2)) {
+          bp <- data_mod$data2[(input$locus_plot_brush$xmin < data_mod$data2$BP_START) & (input$locus_plot_brush$xmax > data_mod$data2$BP_END) &
+                        ((input$locus_plot_brush$ymin < -1.75 & input$locus_plot_brush$ymax > -1.25 & data_mod$data2$STRAND=="+") |
+                         (input$locus_plot_brush$ymin < -2.50 & input$locus_plot_brush$ymax > -2.00 & data_mod$data2$STRAND=="-")), ]
         }
         if(nrow(bp)>0) return(bp) else return(NULL)
       },
@@ -169,94 +157,61 @@ mod_gwas_server <- function(id, base_module){
     })
 
 
-    # observe the import button
-    observeEvent(input$import, {
-
-      # nothing selected
-      if(input$data_source=="") return()
-
-      # custom file input
-      if(input$data_source=="file input") {
-
-        if(is.null(input$gwas_file)) {
-          return()
-        } else {
-          base_module$data <- input$gwas_file
-          base_module$data$log10P <- -log10(base_module$data$P)
-        }
-
-      # internal file input
-      } else {
-
-        # GWAS data lives in the base module
-        base_module$data <- read_internal_data(type   = "gwas",
-                                               source = input$data_source,
-                                               chrom  = base_module$gene_chr,
-                                               start  = base_module$gene_start - base_module$gene_flanks_kb*1000,
-                                               end    = base_module$gene_end + base_module$gene_flanks_kb*1000)
-        base_module$data$log10P <- -log10(base_module$data$P)
-
-        # Gene info lives just in the GWAS module
-        v$genes <- read_gene_data(source = "gencode",
-                                  chrom  = base_module$gene_chr,
-                                  start  = base_module$gene_start - base_module$gene_flanks_kb*1000,
-                                  end    = base_module$gene_end + base_module$gene_flanks_kb*1000)
-
-      }
-
-    })
-
-
-    # observe the clump button
+    #==========================================
+    # Clump button
+    #==========================================
     observeEvent(input$clump, {
 
       # check data
-      if(is.null(base_module$data)) return(NULL)
+      if(is.null(data_mod$data)) return(NULL)
 
       # get the reference file
-      plink_ref <- make_1000G_ref_subset(chrom = base_module$gene_chr,
-                                         from  = base_module$gene_start - base_module$gene_flanks_kb*1000,
-                                         to    = base_module$gene_end + base_module$gene_flanks_kb*1000)
+      plink_ref <- make_1000G_ref_subset(chrom = app$modules$gene$chr,
+                                         from  = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                         to    = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
 
 
       # reset if previously run (issues with factors being reset)
-      if("clump" %in% names(base_module$data)) {
+      if("clump" %in% names(data_mod$data)) {
 
-        base_module$data$clump <- NULL
-        base_module$data$index <- NULL
+        data_mod$data$clump <- NULL
+        data_mod$data$index <- NULL
 
       }
 
-      # run clumping
-      base_module$data <- genepi.utils::clump(gwas      = base_module$data,
-                               p1        = input$clump_p1,
-                               p2        = input$clump_p2,
-                               r2        = input$clump_r2,
-                               kb        = input$clump_kb,
-                               plink2    = get_plink2_exe(),
-                               plink_ref = plink_ref) |> as.data.frame()
+      shiny::withProgress(message = 'Clumping data', value = 0, {
+
+        shiny::incProgress(1/4, detail = paste("Processing", input$`filter-dataset`, "..."))
+
+        # run clumping
+        data_mod$data <- genepi.utils::clump(gwas      = data_mod$data,
+                                             p1        = input$clump_p1,
+                                             p2        = input$clump_p2,
+                                             r2        = input$clump_r2,
+                                             kb        = input$clump_kb,
+                                             plink2    = get_plink2_exe(),
+                                             plink_ref = plink_ref) |> as.data.frame()
+
+        if(any(data_mod$data$index)) {
+          shiny::incProgress(3/4, detail = paste("Complete"))
+        } else {
+          shiny::incProgress(2/4, detail = paste("Failed"))
+          Sys.sleep(1)
+          shiny::incProgress(1/4, detail = paste("Failed"))
+        }
+
+      })
+
 
     })
 
 
-    # observe the data source select input
-    observeEvent(input$data_source, {
-
-      if(input$data_source=="") {
-        # update at the beginning (when the choice is "")
-        files <- get_available_data_sources("gwas")
-        updateSelectInput(session, inputId="data_source", choices=c("hba1c_jurgens2022", names(files)))
-      } else if (input$data_source=="file input") {
-        # using user dataset, enable file input
-        shinyjs::enable(id="gwas_file")
-      } else {
-        # using example dataset, disable file input
-        shinyjs::disable(id="gwas_file")
-      }
-
-    })
-
-
-
+    #==========================================
+    # Return the data module to the reactive
+    # values in the main app server such that
+    # other modules can access the data to use
+    # in their own processes.
+    #==========================================
+    return(data_mod)
   })
 }
