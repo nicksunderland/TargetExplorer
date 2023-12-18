@@ -9,6 +9,7 @@
 #'
 mod_gwas_ui <- function(id){
   ns <- NS(id)
+  cli::cli_alert_info(paste0("initialising mod_gwas_ui(ns=",ns("foo"),")"))
   # need to wrap in div and give an id in order to remove (https://www.youtube.com/watch?app=desktop&v=W7ES6QYvN_c)
   div(
     id = id,
@@ -16,12 +17,15 @@ mod_gwas_ui <- function(id){
                   sidebarPanel(p(strong(paste0("Controls [",id,"]"))),
                                width = 3,
                                hr(),
-                               mod_data_ui(id=ns("data")),
+                               mod_data_ui(id=paste0(id,"-data")),
                                hr(),
                                fluidRow(
                                  column(6, p(strong("Clumping"))),
-                                 column(6, actionButton(inputId = ns("clump"),
+                                 column(4, actionButton(inputId = ns("clump"),
                                                         label   = "Clump data")),
+                                 column(2, prettyCheckbox(inputId = ns("select_all"),
+                                                          label   = strong("All"),
+                                                          shape   = "curve")),
                                ),
                                fluidRow(
                                  column(6,
@@ -70,6 +74,7 @@ mod_gwas_ui <- function(id){
 mod_gwas_server <- function(id, app){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
+    cli::cli_alert_info(paste0("initialising mod_gwas_server(ns=",ns("foo"),")"))
 
     # R CMD checks
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- NULL
@@ -77,8 +82,7 @@ mod_gwas_server <- function(id, app){
     #==========================================
     # Data module server for the GWAS module
     #==========================================
-    data_mod <- mod_data_server(id="data", app$modules$gene)
-
+    data_mod <- mod_data_server(id="data", gene_module=app$modules$gene)
 
     #==========================================
     # Manhattan / LocusZoom plot
@@ -132,6 +136,18 @@ mod_gwas_server <- function(id, app){
           geom_label(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(label=clump, x=BP, y=-0.5)) +
           geom_label_repel(data = data_mod$data[which(data_mod$data$index==TRUE), ], mapping = aes(label=RSID,  x=BP, y=nlog10P)) +
           labs(color = "Clump", fill = "Clump")
+
+      # scenario when 'all' checkbox is clicked - no clump column, but a TRUE index column
+      } else if("index" %in% colnames(data_mod$data)) {
+        p <- p +
+          geom_point(data = data_mod$data,
+                     mapping = aes(x=BP, y=nlog10P,
+                                   color=factor(index, levels=c(TRUE), labels=c("Use all")),
+                                   fill =factor(index, levels=c(TRUE), labels=c("Use all"))), size=1, shape=24) +
+          scale_fill_manual(values=c("red")) +
+          scale_color_manual(values=c("red")) +
+          guides(color = guide_legend(title = NULL),
+                 fill  = guide_legend(title = NULL))
       }
 
       return(p)
@@ -158,12 +174,50 @@ mod_gwas_server <- function(id, app){
 
 
     #==========================================
+    # Select all checkbox
+    #==========================================
+    observeEvent(input$select_all, {
+
+      # check data
+      if(is.null(data_mod$data)) return(NULL)
+
+      # add index flag
+      if(input$select_all) {
+
+        data_mod$data$index <- TRUE
+        if("clump" %in% names(data_mod$data)) {
+          data_mod$data$clump <- NULL
+        }
+
+      } else {
+
+        if("clump" %in% names(data_mod$data)) {
+          data_mod$data$clump <- NULL
+        }
+        if("index" %in% names(data_mod$data)) {
+          data_mod$data$index <- NULL
+        }
+
+      }
+
+    })
+
+
+    #==========================================
     # Clump button
     #==========================================
     observeEvent(input$clump, {
 
       # check data
       if(is.null(data_mod$data)) return(NULL)
+
+      # clean up previous runs if data present
+      if("clump" %in% names(data_mod$data)) {
+        data_mod$data$clump <- NULL
+      }
+      if("index" %in% names(data_mod$data)) {
+        data_mod$data$index <- NULL
+      }
 
       # get the reference file
       plink_ref <- make_1000G_ref_subset(chrom = app$modules$gene$chr,
@@ -204,6 +258,8 @@ mod_gwas_server <- function(id, app){
 
 
     })
+
+
 
 
     #==========================================

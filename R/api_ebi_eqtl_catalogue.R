@@ -6,7 +6,6 @@
 #' but it seems to be an `|` combination as when used together you get gene
 #' eQTLs from way outside your specified region. Therefore I do the gene
 #' filtering after.
-#'
 #' @param study_info_table .
 #' @param studies .
 #' @param tissues .
@@ -21,6 +20,7 @@
 #' @return a data.frame
 #' @export
 #' @importFrom glue glue
+#' @importFrom jsonlite fromJSON
 #' @importFrom shiny withProgress incProgress
 #'
 import_ebi_eqtl <- function(study_info_table,
@@ -55,18 +55,18 @@ import_ebi_eqtl <- function(study_info_table,
 
   # set up parameters - only done position and pvalue filtering for now
   parameters = list('pos'        = ifelse(all(!sapply(list(chr,bp_start,bp_end), is.null)), glue("{chr}:{bp_start}-{bp_end}"), ""),
-                    'nlog10p'    = nlog10p)
+                    'nlog10p'    = ifelse(nlog10p==0, "", nlog10p))
 
   # df to add results to
   data_out <- data.table::data.table()
 
   shiny::withProgress(message = 'Querying EBI eQTL API', value = 0, {
-    n <- nrow(dataset_ids)*2
+
+    # for progress bar
+    n <- nrow(dataset_ids)*2*8 # allow roughly 8 hits per dataset
 
     # cycle the datasets
     for(id in dataset_ids$dataset_id) {
-      shiny::incProgress(1/n, detail = paste("Dataset", id, "..."))
-
       # setup for this study
       size  = 1000
       start = 0
@@ -74,6 +74,9 @@ import_ebi_eqtl <- function(study_info_table,
       # for each dataset, grab data in 1000 chuncks
       while (T) {
         URL = glue::glue("https://www.ebi.ac.uk/eqtl/api/v2/datasets/{id}/associations?size={size}&start={start}")
+
+        # increment progress
+        shiny::incProgress(1/n, detail = paste0("Dataset ", id, "... ?size=", size, "&start=", start, "&pos=", parameters[["pos"]]))
 
         #Adding defined parameters to the request
         for (i in 1:length(parameters)) {
@@ -83,8 +86,6 @@ import_ebi_eqtl <- function(study_info_table,
             URL = glue::glue("{URL}&{names(parameters[i])}={parameters[[i]]}")
           }
         }
-
-        print(URL)
 
         # send the request
         r <- httr::GET(URL, httr::accept_json())
@@ -153,11 +154,11 @@ import_ebi_eqtl <- function(study_info_table,
 
 
 # API tutorial https://github.com/eQTL-Catalogue/eQTL-Catalogue-resources/blob/master/tutorials/API_v2/eQTL_API_tutorial.md
-#' @title QBI eQTL Catalogue dataset information
+#' @title EBI eQTL Catalogue dataset information
 #' @return a data.frame of study information
 #' @export
 #'
-get_ebi_study_info <- function() {
+get_ebi_eqtl_info <- function() {
 
   # try to pull the dataset information from the API
   tryCatch({

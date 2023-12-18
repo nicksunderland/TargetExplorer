@@ -3,7 +3,15 @@
 
 # TargetExplorer
 
+TODO: - document TargetExplorerData and caching / memoise  
+- document standard approach to minimum datasets - document module
+structure in a diagram - write a function to keep track of how big the
+reference split cache is getting
+
 <!-- badges: start -->
+
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
 The goal of TargetExplorer is to …

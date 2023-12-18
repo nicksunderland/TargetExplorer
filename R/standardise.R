@@ -11,7 +11,8 @@
 standardise_data <- function(dat, source, build_from=NULL, build_to=NULL) {
 
   # checks
-  source <- match.arg(source, choices = c("ebi_eqtl_api","internal"))
+  source <- match.arg(source, choices = c("ebi_eqtl_api","internal","ieu_opengwas","ebi_gwas"))
+  if(is.null(dat)) return(NULL)
 
   # work with data.tables
   dat <- data.table::as.data.table(dat)
@@ -25,6 +26,14 @@ standardise_data <- function(dat, source, build_from=NULL, build_to=NULL) {
   } else if(source=="internal") {
 
     col_map <- c(RSID="RSID", CHR="CHR", BP="BP", EA="EA", OA="OA", EAF="EAF", BETA="BETA", SE="SE", P="P", N="N")
+
+  } else if(source=="ieu_opengwas") {
+
+    col_map <- c(RSID="rsid", CHR="chr", BP="position", EA="ea", OA="nea", EAF="eaf", BETA="beta", SE="se", P="p", N="n", TRAIT="trait")
+
+  } else if(source=="ebi_gwas") {
+
+    col_map <- c(RSID="variant_id", CHR="chromosome", BP="base_pair_location", EA="effect_allele", OA="other_allele", EAF="effect_allele_frequency", BETA="beta", SE="se", OR="odds_ratio", OR_LR="ci_lower", OR_UR="ci_upper", P="p_value", TRAIT="trait")
 
   }
 

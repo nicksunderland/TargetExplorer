@@ -14,9 +14,9 @@ app_server <- function(input, output, session) {
   ))
 
 
-
   # observe the add step button
   observeEvent(input$add_step, {
+    cli::cli_alert_info("app_server::observeEvent(input$add_step)")
 
     # get the module type to add and how many already exist
     add_what <- input$module_type
@@ -33,6 +33,15 @@ app_server <- function(input, output, session) {
 
       # add the correct UI type
       insertUI(selector="#add_here", ui=mod_gwas_ui(id=this_id))
+
+    } else if(add_what=="eQTL") {
+
+        # create the module and add to the list of active modules
+        app$modules[[this_id]] <- mod_eqtl_server(id = this_id, app = app)
+
+        # add the correct UI type
+        insertUI(selector="#add_here", ui=mod_eqtl_ui(id=this_id))
+
 
     } else if(add_what=="Coloc") {
 
@@ -56,13 +65,14 @@ app_server <- function(input, output, session) {
     updateSelectInput(inputId = "active_modules",
                       choices = names(app$modules)[!names(app$modules) %in% c("gene")])
 
-    names(app$modules) <- names(app$modules)
+    names(app$modules) <- names(app$modules) # ?needed
 
   })
 
 
   # observe the remove step button
   observeEvent(input$remove_step, {
+    cli::cli_alert_info("app_server::observeEvent(input$remove_step)")
 
     # get the id to remove
     unwanted_step_id <- input$active_modules
@@ -73,14 +83,13 @@ app_server <- function(input, output, session) {
       session = session
     )
 
-    # remove the shiny inputs
+    # remove the shiny inputs - this is a custom function (see this blog:
+    # https://appsilon.com/how-to-safely-remove-a-dynamic-shiny-module/
     remove_shiny_inputs(
       id = unwanted_step_id,
-      .input = input
+      .input = input,
+      .session = session
     )
-
-    # may need to look into also removing the observer events
-    # https://appsilon.com/how-to-safely-remove-a-dynamic-shiny-module/
 
     # remove from the active_modules reactive list
     app$modules[[unwanted_step_id]] <- NULL
@@ -88,6 +97,7 @@ app_server <- function(input, output, session) {
     # update the active_modules select box
     updateSelectInput(inputId="active_modules",
                       choices=names(app$modules)[!names(app$modules) %in% c("gene")])
+
   })
 
 }

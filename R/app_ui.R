@@ -18,7 +18,7 @@ app_ui <- function(request) {
       hr(),
       fluidRow(
         column(8, mod_gene_ui(id="gene")),
-        column(1, selectInput(inputId="module_type", label="Modules", choices=c("GWAS","Coloc","MR"))),
+        column(1, selectInput(inputId="module_type", label="Modules", choices=c("GWAS","eQTL","Coloc","MR"))),
         column(1, actionButton(inputId="add_step", width = "40px", label = "", icon = icon("plus"))),
         column(1, selectInput(inputId="active_modules", label="Active:", choices=c(""))),
         column(1, actionButton(inputId="remove_step", width = "40px", label = "", icon = icon("trash-can"))),

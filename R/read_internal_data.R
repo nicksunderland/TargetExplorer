@@ -1,25 +1,32 @@
 get_data_directory <- function(type=NULL) {
 
-  # First look in the config file
-  config <- yaml::read_yaml(system.file("app-config.yml", package="TargetExplorer"))
-  if(dir.exists(config[["data_directory"]])) {
-    if(is.null(type)) return(data_dir) else return(file.path(data_dir,type))
-  }
+  tryCatch({
+    # First look in the config file
+    config <- yaml::read_yaml(system.file("app-config.yml", package="TargetExplorer"))
+    if(dir.exists(config[["data_directory"]])) {
+      if(is.null(type)) return(data_dir) else return(file.path(data_dir,type))
+    }
 
-  # look for installed data directory
-  data_dir <- system.file("extdata", package="TargetExplorerData")
-  if(dir.exists(data_dir)) {
-    if(is.null(type)) return(data_dir) else return(file.path(data_dir,type))
-  }
+    # look for installed data directory
+    data_dir <- system.file("extdata", package="TargetExplorerData")
+    if(dir.exists(data_dir)) {
+      if(is.null(type)) return(data_dir) else return(file.path(data_dir,type))
+    }
 
-  # Look next to this packages directory
-  this_package_dir <- dirname( dirname( system.file("", package="TargetExplorer") ) )
-  data_dir <- file.path(this_package_dir, "TargetExplorerData", "inst", "extdata")
-  if(dir.exists(data_dir)) {
-    if(is.null(type)) return(data_dir) else return(file.path(data_dir,type))
-  }
+    # Look next to this packages directory
+    this_package_dir <- dirname( dirname( system.file("", package="TargetExplorer") ) )
+    data_dir <- file.path(this_package_dir, "TargetExplorerData", "inst", "extdata")
+    if(dir.exists(data_dir)) {
+      if(is.null(type)) return(data_dir) else return(file.path(data_dir,type))
+    }
 
-  stop("Data directory not found - have you installed TargetExplorerData?")
+  },error=function(e){
+    print(e)
+    # print(getwd())
+    # return("/Users/xx20081/git/TargetExplorerData/extdata") # hack to pass devtools::check.......
+  })
+
+
 }
 
 
@@ -45,29 +52,35 @@ get_available_data_sources <- function() {
 
 read_internal_data <- function(type, dataset, chrom, start, end) {
 
-  # data directory
-  data_dir <- get_data_directory(type)
+  shiny::withProgress(message = 'Reading package data', value = 0, {
+    shiny::incProgress(1/4, detail = paste("Dataset", dataset, "..."))
 
-  # the data source files
-  source_dir <- file.path(data_dir, dataset)
+    # data directory
+    data_dir <- get_data_directory(type)
 
-  # file path
-  source_file <- file.path(source_dir, paste0("chr",chrom,".fst"))
+    # the data source files
+    source_dir <- file.path(data_dir, dataset)
 
-  # create a fst object which allows row access without reading the whole file
-  chr_fst <- fst::fst(source_file)
+    # file path
+    source_file <- file.path(source_dir, paste0("chr",chrom,".fst"))
 
-  # read just the position data (an integer vector)
-  pos <- chr_fst[, "BP"]
+    # create a fst object which allows row access without reading the whole file
+    chr_fst <- fst::fst(source_file)
 
-  # apply the BP filter and get the indices
-  row_idxs <- which(pos >= start & pos <= end)
+    # read just the position data (an integer vector)
+    pos <- chr_fst[, "BP"]
 
-  # read the needed rows
-  d <- chr_fst[row_idxs, ]
+    # apply the BP filter and get the indices
+    row_idxs <- which(pos >= start & pos <= end)
 
-  # standardise data.frame
-  d <- standardise_data(d, source="internal")
+    # read the needed rows
+    d <- chr_fst[row_idxs, ]
+
+    # standardise data.frame
+    d <- standardise_data(d, source="internal")
+
+    shiny::incProgress(3/4, detail = paste("Complete"))
+  })
 
   return(d)
 }

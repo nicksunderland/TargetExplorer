@@ -80,31 +80,13 @@ mod_gene_server <- function(id){
     observeEvent(input$id_search, {
 
       tryCatch({
-        # create the request URL
-        if(input$build=="GRCh37") {
 
-          url <- glue::glue("https://grch37.rest.ensembl.org/lookup/id/{trimws(input$id)}?expand=1")
-
-        } else if(input$build=="GRCh38") {
-
-          url <- glue::glue("https://rest.ensembl.org/lookup/id/{trimws(input$id)}?expand=1")
-
-        }
-
-        print(url)
-
-        # send the request
-        r <- httr::GET(url=url, config=httr::content_type("application/json"))
-
-        # receive resonse and extract content
-        httr::stop_for_status(r)
-        gene_dat <- httr::content(r)
+        gene_dat <- get_ensembl_gene_info(input$id, input$build)
 
         # update the UI
         updateSelectInput( inputId = "chr",   selected = gene_dat$seq_region_name)
         updateNumericInput(inputId = "start", value    = gene_dat$start)
         updateNumericInput(inputId = "end",   value    = gene_dat$end)
-        # updateTextInput(   inputId = "id",    value    ="", placeholder = paste0(gene_dat$display_name," (",input$id,")"))
 
       }, error=function(e) {
 
