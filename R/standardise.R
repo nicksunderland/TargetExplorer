@@ -21,7 +21,7 @@ standardise_data <- function(dat, source, build_from=NULL, build_to=NULL) {
   if(source=="ebi_eqtl_api") {
 
     col_map <- c(RSID="rsid", CHR="chromosome", BP="position", EA="alt", OA="ref", EAF="maf", BETA="beta",SE="se", P="pvalue", N="N",
-                 GENE_ID="gene_id", STUDY="STUDY", TISSUE="TISSUE")
+                 GENE_ID="gene_id", STUDY="STUDY", TISSUE="TISSUE", QUANT_METHOD="QUANT_METHOD", TPM="median_tpm")
 
   } else if(source=="internal") {
 

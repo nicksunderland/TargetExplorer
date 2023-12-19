@@ -121,9 +121,11 @@ mod_gwas_server <- function(id, app){
                     mapping = aes(xmin=BP_START, xmax=BP_END, ymin=-2.5, ymax=-2), fill="grey", alpha=0.3) +
           geom_text_repel(data = data_mod$data2[data_mod$data2$STRAND=="-",  ],
                           mapping = aes(label = GENE_NAME, x=(BP_END-BP_START)/2 + BP_START, y =-2.25),
+                          inherit.aes=FALSE,
                           direction = "x", min.segment.length = 0.25) +
           geom_text_repel(data = data_mod$data2[data_mod$data2$STRAND=="+",  ],
                           mapping = aes(label = GENE_NAME, x=(BP_END-BP_START)/2 + BP_START, y =-1.5),
+                          inherit.aes=FALSE,
                           direction = "x", min.segment.length = 0.25)
       }
 

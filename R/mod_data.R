@@ -161,14 +161,37 @@ mod_data_server <- function(id, gene_module){
 
         return(selector)
 
-      } else if(input$data_source %in% c("EBI eQTL Catalogue", "Local")) {
+      } else if(input$data_source == "EBI eQTL Catalogue") {
 
         selector <- datamods::select_group_ui(id = ns("filter"),
                                               params = list(
-                                                catalogue = list(inputId = "catalogue", label = "Catalogue:"),
-                                                dataset   = list(inputId = "dataset",   label = "Dataset:")
+                                                catalogue    = list(inputId = "catalogue",   label = "Catalogue:"),
+                                                dataset      = list(inputId = "dataset",     label = "Dataset:"),
+                                                quant_method = list(inputId = "quant_method",label = "Quant. method:")
                                               ),
+                                              vs_args = list(noOfDisplayValues = 1),
                                               inline = FALSE)
+
+        filter <- datamods::select_group_server(id="filter",
+                                                data = reactive(v$info),
+                                                vars = reactive(c("catalogue","dataset","quant_method")))
+
+        return(selector)
+
+      } else if(input$data_source == "Local") {
+
+        selector <- datamods::select_group_ui(id = ns("filter"),
+                                              params = list(
+                                                catalogue    = list(inputId = "catalogue",   label = "Catalogue:"),
+                                                dataset      = list(inputId = "dataset",     label = "Dataset:")
+                                              ),
+                                              vs_args = list(noOfDisplayValues = 1),
+                                              inline = FALSE)
+
+        filter <- datamods::select_group_server(id="filter",
+                                                data = reactive(v$info),
+                                                vars = reactive(c("catalogue","dataset")))
+
         return(selector)
 
       }
@@ -179,9 +202,8 @@ mod_data_server <- function(id, gene_module){
     #==========================================
     # severe element for the `datamods::select_group_ui` input selector UI above (used if source "EBI eQTL Catalogue" or "Local")
     #==========================================
-    filter <- datamods::select_group_server(id="filter",
-                                            data = reactive(v$info),
-                                            vars = reactive(c("catalogue","dataset")))
+
+
 
 
     #==========================================
@@ -198,7 +220,7 @@ mod_data_server <- function(id, gene_module){
           # TODO
         }
 
-        # OpenGWAS API
+      # OpenGWAS API
       } else if(input$data_source=="IEU Open GWAS") {
 
         v$data <- import_ieu_gwas(study_id = input$filter_gwas,
@@ -223,7 +245,7 @@ mod_data_server <- function(id, gene_module){
                                     end    = gene_module$end + gene_module$flanks_kb*1000)
         }
 
-        # EBI GWAS catalogue API
+      # EBI GWAS catalogue API
       } else if(input$data_source=="EBI GWAS Catalogue") {
 
         v$data <- import_ebi_gwas(study_id = input$filter_gwas,
@@ -233,12 +255,13 @@ mod_data_server <- function(id, gene_module){
                                   build    = gene_module$build)
 
 
-        # EBI eQTL catalogue API
+      # EBI eQTL catalogue API
       } else if(input$data_source=="EBI eQTL Catalogue") {
 
         v$data <- import_ebi_eqtl(study_info_table = v$info,
                                   studies  = input$`filter-catalogue`,
                                   tissues  = input$`filter-dataset`,
+                                  method   = input$`filter-quant_method`,
                                   chr      = gene_module$chr,
                                   bp_start = gene_module$start - gene_module$flanks_kb*1000,
                                   bp_end   = gene_module$end + gene_module$flanks_kb*1000,
@@ -246,8 +269,13 @@ mod_data_server <- function(id, gene_module){
                                   nlog10p  = -log10(input$pval),
                                   build    = gene_module$build)
 
+        v$data2 <- read_gene_data(source = "gencode",
+                                  chrom  = gene_module$chr,
+                                  start  = gene_module$start - gene_module$flanks_kb*1000,
+                                  end    = gene_module$end + gene_module$flanks_kb*1000)
 
-        # Internal file
+
+      # Internal file
       } else if(input$data_source=="Local") {
 
         v$data <- read_internal_data(type    = input$`filter-catalogue`,

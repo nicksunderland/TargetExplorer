@@ -8,6 +8,7 @@ import_ebi_eqtl(
   study_info_table,
   studies = NULL,
   tissues = NULL,
+  method = NULL,
   chr = NULL,
   bp_start = NULL,
   bp_end = NULL,

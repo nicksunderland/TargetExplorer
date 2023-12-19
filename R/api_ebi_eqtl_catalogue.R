@@ -26,6 +26,7 @@
 import_ebi_eqtl <- function(study_info_table,
                             studies  = NULL,  #studies = c("BLUEPRINT","GTEx")
                             tissues  = NULL,  #tissues = c("adipose","adipose","monocyte")
+                            method   = NULL,  #methods = c("ge", "exon" etc.)
                             chr      = NULL,
                             bp_start = NULL,
                             bp_end   = NULL,
@@ -49,94 +50,57 @@ import_ebi_eqtl <- function(study_info_table,
   # work out which datasets we need to query
   dataset_ids <- study_info_table[study_info_table$catalogue  %in% studies &
                                   study_info_table$dataset %in% tissues &
-                                  study_info_table$quant_method=="ge", # TODO: not sure about this restriction/filter at the minute...
-                                  c("dataset_id","catalogue","dataset")]
+                                  study_info_table$quant_method %in% method,
+                                  c("dataset_id","catalogue","dataset","quant_method")]
   dataset_ids <- unique(dataset_ids)
-
-  # set up parameters - only done position and pvalue filtering for now
-  parameters = list('pos'        = ifelse(all(!sapply(list(chr,bp_start,bp_end), is.null)), glue("{chr}:{bp_start}-{bp_end}"), ""),
-                    'nlog10p'    = ifelse(nlog10p==0, "", nlog10p))
-
-  # df to add results to
-  data_out <- data.table::data.table()
 
   shiny::withProgress(message = 'Querying EBI eQTL API', value = 0, {
 
     # for progress bar
-    n <- nrow(dataset_ids)*2*8 # allow roughly 8 hits per dataset
+    n <- nrow(dataset_ids)
 
     # cycle the datasets
-    for(id in dataset_ids$dataset_id) {
-      # setup for this study
-      size  = 1000
-      start = 0
+    data_out <- lapply(dataset_ids$dataset_id, function(id) {
 
-      # for each dataset, grab data in 1000 chuncks
-      while (T) {
-        URL = glue::glue("https://www.ebi.ac.uk/eqtl/api/v2/datasets/{id}/associations?size={size}&start={start}")
+      # extract the study/dataset (isolated function so that we can memoise cache the result)
+      responses <- import_ebi_eqtl_dataset(id, chr, bp_start, bp_end)
 
-        # increment progress
-        shiny::incProgress(1/n, detail = paste0("Dataset ", id, "... ?size=", size, "&start=", start, "&pos=", parameters[["pos"]]))
+      # no data found
+      if(is.null(responses)) {
 
-        #Adding defined parameters to the request
-        for (i in 1:length(parameters)) {
-          if(is.null(parameters[[i]]) || parameters[[i]]=="") {
-            URL = URL
-          } else {
-            URL = glue::glue("{URL}&{names(parameters[i])}={parameters[[i]]}")
-          }
-        }
+        shiny::incProgress(1/n, detail = paste("\nDataset", id, "failed"))
+        return(NULL)
 
-        # send the request
-        r <- httr::GET(URL, httr::accept_json())
-        cont <- httr::content(r, "text", encoding = "UTF-8")
+      # data found
+      } else {
 
-        # If the request was unsuccessful
-        if (httr::status_code(r) != 200) {
-          #If we get no results at all, print error
-          if (start == 0) {
-            print(glue::glue("Error {httr::status_code(r)}"))
-            print(cont)
-            return ()
-          }
-          #else just break
-          break
-        }
+        # add dataset info to the table
+        responses[, STUDY        := dataset_ids[dataset_ids$dataset_id==id, "catalogue"]]
+        responses[, TISSUE       := dataset_ids[dataset_ids$dataset_id==id, "dataset"]]
+        responses[, QUANT_METHOD := dataset_ids[dataset_ids$dataset_id==id, "quant_method"]]
 
-        # extract content
-        cont_df <- jsonlite::fromJSON(cont)
+        # update progress
+        shiny::incProgress(1/n, detail = paste("\nDataset", id, "complete"))
 
-        if (start == 0) {
-          responses <- data.table::data.table(cont_df)
-        } else {
-          responses <- rbind(responses, cont_df)
-        }
-        start <- start + size
+        # return
+        return(responses)
       }
 
-      # add dataset info to the table
-      responses[, STUDY  := dataset_ids[dataset_ids$dataset_id==id, "catalogue"]]
-      responses[, TISSUE := dataset_ids[dataset_ids$dataset_id==id, "dataset"]]
-
-      # add to the main table
-      data_out <- rbind(data_out, responses)
-
-      # update progress
-      shiny::incProgress(1/n, detail = paste("Dataset", id, "complete"))
-
-    }
+    }) |> # end lapply datasets
+      data.table::rbindlist()
 
   }) # end withProgress
 
-  # No data found, return null
+  # No data found in any dataset, return null
   if(nrow(data_out)==0) return(NULL)
 
   # calculate N as allele number / 2
   data_out[, N := ceiling(an/2)]
 
   # see description...
-  if(!is.null(gene_id)) {
-    data_out <- data_out[gene_id==gene_id, ]
+  gene_id_input <- gene_id # same name as column, rename to avoid confusion in data.table
+  if(!is.null(gene_id_input)) {
+    data_out <- data_out[gene_id==gene_id_input, ]
   }
 
   # standardise
@@ -153,6 +117,68 @@ import_ebi_eqtl <- function(study_info_table,
 
 
 
+#' @title Import EBI eQTL dataset
+#' @param id the EBI eQTL study ID
+#' @inheritParams import_ebi_eqtl
+#' @return a data.table, the eQTL dataset with standardised column names
+#' @export
+#'
+import_ebi_eqtl_dataset <- function(id, chr, bp_start, bp_end) {
+
+  shiny::withProgress(message = paste0('Extracting dataset ', id), value = 0, {
+
+    # setup for this study
+    size  = 1000
+    start = 0
+    n = 8
+
+    # for each dataset, grab data in 1000 chuncks
+    while (T) {
+
+      # increment progress
+      shiny::incProgress(1/n, detail = glue::glue("size={size}&start={start}&pos={chr}:{bp_start}-{bp_end}"))
+
+      # the URL - ENSG00000112164 - QTS000015 / QTD000141  &molecular_trait_id={gene_id} doesnt work as seems to cut the data off before the gene starts....
+      URL = glue::glue("https://www.ebi.ac.uk/eqtl/api/v2/datasets/{id}/associations?size={size}&start={start}&pos={chr}:{bp_start}-{bp_end}")
+
+      # send the request
+      r <- httr::GET(URL, httr::accept_json())
+      cont <- httr::content(r, "text", encoding = "UTF-8")
+
+      # If the request was unsuccessful
+      if (httr::status_code(r) != 200) {
+        if(start==0) {
+          #If we get no results at all, print error
+          showNotification(glue::glue("Error {httr::status_code(r)} - no results found in dataset={id}"), type="warning")
+          return(NULL)
+        } else {
+          return(responses)
+        }
+      }
+
+      # extract content
+      cont_df <- jsonlite::fromJSON(cont) |> data.table::as.data.table()
+
+      if (start == 0) {
+        responses <- data.table::data.table(cont_df)
+      } else {
+        responses <- rbind(responses, cont_df)
+      }
+
+      # browser()
+
+      start <- start + size
+    }
+
+  }) # end with progress
+
+}
+
+
+
+
+
+
 # API tutorial https://github.com/eQTL-Catalogue/eQTL-Catalogue-resources/blob/master/tutorials/API_v2/eQTL_API_tutorial.md
 #' @title EBI eQTL Catalogue dataset information
 #' @return a data.frame of study information
@@ -166,19 +192,25 @@ get_ebi_eqtl_info <- function() {
     max_pulled_rows = 1000 # All datasets will be pulled if this parameter is bigger than the actual number of datasets
 
     # TODO: work out which quantification methods we want - gone with 'ge' gene counts, the default for now, but there are lots of different ones
-    URL = glue::glue("https://www.ebi.ac.uk/eqtl/api/v2/datasets/?size={max_pulled_rows}&quant_method=ge")
+    URL = glue::glue("https://www.ebi.ac.uk/eqtl/api/v2/datasets/?size={max_pulled_rows}") #&quant_method=ge
 
     # send the request
     r <- httr::GET(URL, httr::accept_json())
     httr::status_code(r)
 
+    if (httr::status_code(r) != 200) {
+      #If we get no results at all, print error
+      showNotification(glue::glue("Status {httr::status_code(r)} - no EBI eQTL study information found"), type="error")
+      return(NULL)
+    }
+
     # get the content
     cont <- httr::content(r, "text", encoding = "UTF-8")
-    df <- jsonlite::fromJSON(cont)
+    df <- jsonlite::fromJSON(cont) |> data.table::as.data.table()
 
     # standardise names
-    names(df)[names(df)=="study_label"] <- "catalogue"
-    names(df)[names(df)=="tissue_label"] <- "dataset"
+    data.table::setnames(df, "study_label", "catalogue")
+    data.table::setnames(df, "tissue_label", "dataset")
 
     # return
     return(df)
@@ -186,6 +218,7 @@ get_ebi_eqtl_info <- function() {
   }, error=function(e){
 
     print(e)
+    return(NULL)
 
   })
 

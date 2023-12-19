@@ -10,9 +10,10 @@
   get_ensembl_gene_info <<- memoise::memoise(get_ensembl_gene_info, cache = cache)
 
   # data importing functions
-  import_ieu_gwas       <<- memoise::memoise(import_ieu_gwas,       cache = cache)
-  import_ebi_eqtl       <<- memoise::memoise(import_ebi_eqtl,       cache = cache)
-  import_ebi_gwas       <<- memoise::memoise(import_ebi_gwas,       cache = cache)
+  import_ieu_gwas         <<- memoise::memoise(import_ieu_gwas,         cache = cache)
+  # import_ebi_eqtl         <<- memoise::memoise(import_ebi_eqtl,         cache = cache) - do individual studies instead
+  import_ebi_eqtl_dataset <<- memoise::memoise(import_ebi_eqtl_dataset, cache = cache)
+  import_ebi_gwas         <<- memoise::memoise(import_ebi_gwas,         cache = cache)
 
 }
 
