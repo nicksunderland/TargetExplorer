@@ -18,6 +18,8 @@ mod_eqtl_ui <- function(id){
                                hr(),
                                mod_data_ui(id=paste0(id,"-data")),
                                hr(),
+                               mod_clump_ui(id=ns("clump")),
+                               hr(),
                                fluidRow(
                                  column(6,
                                         selectInput(inputId = ns("source_2"),
@@ -52,7 +54,9 @@ mod_eqtl_ui <- function(id){
                                         actionButton(inputId = ns("apply"),
                                                      label   = "Apply"),
                                         actionButton(inputId = ns("reset"),
-                                                     label   = "Reset")
+                                                     width   = "40px",
+                                                     label   = "",
+                                                     icon    = icon("rotate-left"))
                                  )
                                ),
 
@@ -103,7 +107,8 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     # Data module server for the eQTL module
     #==========================================
-    data_mod <- mod_data_server(id="data", gene_module=app$modules$gene)
+    data_mod  <- mod_data_server(id="data", gene_module=app$modules$gene)
+    clump_mod <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
 
 
     #==========================================

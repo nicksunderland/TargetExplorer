@@ -61,6 +61,13 @@ standardise_data <- function(dat, source, build_from=NULL, build_to=NULL) {
 
   # final processing steps / column additions
   dat[, nlog10P := -log10(P)]
+  dat <- dat[is.numeric(BETA) &
+             is.finite(BETA) &
+             is.numeric(P) &
+             is.finite(P) &
+             is.finite(SE) &
+             P < 1 &
+             P > 0, ]
 
   # return standardised data
   return(dat)

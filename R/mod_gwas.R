@@ -1,4 +1,4 @@
-#' step UI Function
+#' GWAS UI Function
 #'
 #' @description A shiny Module.
 #'
@@ -19,39 +19,7 @@ mod_gwas_ui <- function(id){
                                hr(),
                                mod_data_ui(id=paste0(id,"-data")),
                                hr(),
-                               fluidRow(
-                                 column(6, p(strong("Clumping"))),
-                                 column(3, actionButton(inputId = ns("clump"),
-                                                        label   = "Clump data")),
-                                 column(3, actionButton(inputId = ns("reset"),
-                                                        label   = "Reset"))
-                               ),
-                               fluidRow(
-                                 column(6,
-                                        sliderTextInput(inputId  = ns("clump_p1"),
-                                                        label    = "p1",
-                                                        choices  = c(5e-8,5e-6,5e-4,0.01,0.05,0.1,0.5,1.0),
-                                                        selected = 5e-8,
-                                                        grid     = TRUE),
-                                        sliderTextInput(inputId  = ns("clump_r2"),
-                                                        label    = "r2",
-                                                        choices  = c(0.0001,0.001,0.01,seq(0.1,0.9,0.1),0.9999),
-                                                        selected = 0.001,
-                                                        grid     = TRUE)
-                                        ),
-                                 column(6,
-                                        sliderTextInput(inputId  = ns("clump_p2"),
-                                                        label    = "p2",
-                                                        choices  = c(5e-8,5e-6,5e-4,0.01,0.05,0.1,0.5,1.0),
-                                                        selected = 1.0,
-                                                        grid     = TRUE),
-                                        sliderTextInput(inputId  = ns("clump_kb"),
-                                                        label    = "kb",
-                                                        choices  = c(1,seq(0,1000,50)[-1]),
-                                                        selected = 250,
-                                                        grid     = TRUE)
-                                        )
-                               ),
+                               mod_clump_ui(id=ns("clump"))
                   ), # sidebar panel end
                   mainPanel(width = 9,
                             # Locus zoom plot
@@ -79,9 +47,10 @@ mod_gwas_server <- function(id, app){
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
 
     #==========================================
-    # Data module server for the GWAS module
+    # Data and clump module servers for the GWAS module
     #==========================================
-    data_mod <- mod_data_server(id="data", gene_module=app$modules$gene)
+    data_mod  <- mod_data_server(id="data", gene_module=app$modules$gene)
+    clump_mod <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
 
     #==========================================
     # Manhattan / LocusZoom plot
@@ -242,10 +211,7 @@ mod_gwas_server <- function(id, app){
 
       })
 
-
     })
-
-
 
 
     #==========================================
