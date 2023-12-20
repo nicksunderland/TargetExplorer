@@ -57,6 +57,8 @@ get_ieu_gwas_info <- function() {
 #' @param chr .
 #' @param bp_start .
 #' @param bp_end .
+#' @param build .
+#' @param pthresh .
 #' @return a data.frame
 #' @export
 #' @importFrom glue glue
@@ -67,7 +69,8 @@ import_ieu_gwas <- function(study_id,
                             chr      = NULL,
                             bp_start = NULL,
                             bp_end   = NULL,
-                            build    = "GRCh37") {
+                            build    = "GRCh37",
+                            pthresh  = NULL) {
 
   # checks
   build <- match.arg(build, choices = c("GRCh37","GRCh38"))
@@ -118,6 +121,9 @@ import_ieu_gwas <- function(study_id,
   } else if(build=="GRCh37") {
     data_out <- standardise_data(data_out, source="ieu_opengwas", build_from=NULL, build_to=NULL)
   }
+
+  # apply pvalue threshold
+  data_out <- data_out[P <= pthresh, ]
 
   # return the data
   return(data_out)

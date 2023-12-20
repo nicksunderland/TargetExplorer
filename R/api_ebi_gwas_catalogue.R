@@ -5,6 +5,8 @@
 #' @param chr .
 #' @param bp_start .
 #' @param bp_end .
+#' @param build .
+#' @param pthresh .
 #' @return a data.frame
 #' @export
 #' @importFrom glue glue
@@ -16,7 +18,8 @@ import_ebi_gwas <- function(study_id,
                             chr      = NULL,
                             bp_start = NULL,
                             bp_end   = NULL,
-                            build    = "GRCh38") {
+                            build    = "GRCh38",
+                            pthresh  = NULL) {
 
   # checks
   build <- match.arg(build, choices = c("GRCh37","GRCh38"))
@@ -117,6 +120,9 @@ import_ebi_gwas <- function(study_id,
   } else if(build=="GRCh38") {
     data_out <- standardise_data(data_out, source="ebi_gwas", build_from=NULL, build_to=NULL)
   }
+
+  # apply pvalue threshold
+  data_out <- data_out[P <= pthresh, ]
 
   # return the data
   return(data_out)

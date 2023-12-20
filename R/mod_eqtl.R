@@ -26,12 +26,11 @@ mod_eqtl_ui <- function(id){
                                  ),
                                  column(6,
                                         selectInput(inputId = ns("source_2_filter"),
-                                                    label   = "Filter",
+                                                    label   = "Upstream filter",
                                                     choices = c("All"),
                                                     selected = "All")
                                  )
                                ),
-                               hr(),
                                fluidRow(
                                  column(6,
                                         selectizeInput(inputId = ns("datasets"),
@@ -48,8 +47,12 @@ mod_eqtl_ui <- function(id){
                                  column(6,
                                         selectInput(inputId = ns("dataset_combine_method"),
                                                     label   = "Combine by",
-                                                    choices = c("Don't combine", "Maximum BETA","Median BETA", "Lowest P-value", "Largest sample size"),
-                                                    selected = "Largest sample size")
+                                                    choices = c("Don't combine", "Maximum abs(BETA)","Lowest P-value","Largest sample size"),
+                                                    selected = "Largest sample size"),
+                                        actionButton(inputId = ns("apply"),
+                                                     label   = "Apply"),
+                                        actionButton(inputId = ns("reset"),
+                                                     label   = "Reset")
                                  )
                                ),
 
@@ -86,13 +89,16 @@ mod_eqtl_ui <- function(id){
 
 #' eQTL Server Functions
 #' @import ggplot2 ggrepel ggfortify
+#' @importFrom stats dnorm sd
 #' @noRd
 mod_eqtl_server <- function(id, app){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
     # R CMD checks
-    #
+    GENE_NAME <- BP_END <- BP_START <- GENE_NAME <- nlog10P <- BETA_source <- BETA_eqtl <- EAF <- EA <- OA <- CHR <- BP <- N <- P <- eqtl <- NULL
+    DATASET <- TPM <- mean_tpm <- QUANT_METHOD <- STUDY_TISSUE_METHOD <- TISSUE <- STUDY <- STUDY_TISSUE <- RSID <- RSID_beta <- CHR <- BP <- N <- P <- eqtl <- NULL
+    sd_beta <- BETA <- mean_beta <- beta_dnorm <- NULL
 
     #==========================================
     # Data module server for the eQTL module
@@ -104,7 +110,7 @@ mod_eqtl_server <- function(id, app){
     # Observe additions / deletions of upstream source modules
     #==========================================
     observeEvent(app$modules, {
-      updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules) %in% c("gene",id)])
+      updateSelectInput(session, inputId="source_2", choices=c("", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
     })
 
 
@@ -113,7 +119,7 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     observeEvent(input$source_2, {
       if(is.null(input$source_2) || input$source_2=="") {
-        updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules) %in% c("gene",id)])
+        updateSelectInput(session, inputId="source_2", choices=c("", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
       }
       if(!is.null(app$modules[[input$source_2]]$data)) {
         source_cols <- names(app$modules[[input$source_2]]$data)
@@ -131,10 +137,10 @@ mod_eqtl_server <- function(id, app){
 
       # mean beta per quantification method
       data_mod$data[, mean_beta := mean(BETA, na.rm=TRUE), by="QUANT_METHOD"]
-      data_mod$data[, sd_beta   := sd(BETA, na.rm=TRUE),   by="QUANT_METHOD"]
+      data_mod$data[, sd_beta   := stats::sd(BETA, na.rm=TRUE),   by="QUANT_METHOD"]
 
       # beta dnorm and ordered RSID factor (nicer plotting)
-      data_mod$data[, beta_dnorm := dnorm(BETA, mean=mean_beta, sd=sd_beta)]
+      data_mod$data[, beta_dnorm := stats::dnorm(BETA, mean=mean_beta, sd=sd_beta)]
       data.table::setorder(data_mod$data, beta_dnorm)
       data_mod$data[, RSID_beta := factor(RSID, levels=unique(data_mod$data$RSID))]
 
@@ -161,7 +167,8 @@ mod_eqtl_server <- function(id, app){
       data.table::setcolorder(data_mod$pca_data, "DATASET")
 
       # update filtering options
-      updateSelectInput(session, inputId="datasets", choices=c("All", unique(levels(data_mod$data$STUDY_TISSUE_METHOD))))
+      current_datasets <- input$datasets
+      updateSelectInput(session, inputId="datasets", choices=c("All", unique(levels(data_mod$data$STUDY_TISSUE_METHOD))), selected=current_datasets)
 
     })
 
@@ -217,45 +224,111 @@ mod_eqtl_server <- function(id, app){
 
 
     #==========================================
-    # filtering of upstream variants
+    # reset filtering of upstream variants
     #==========================================
-    observeEvent(list(input$source_2,
-                      input$source_2_filter,
-                      input$datasets,  # whatever loaded [column STUDY_TISSUE]
-                      input$beta_dir, # c("Any","Concordant","Disconcordant")
-                      input$dataset_combine_method), # c("Don't combine" "Maximum BETA","Median BETA", "Lowest P-value", "Largest sample size")
-                 {
+    observeEvent(input$reset, {
 
+      if("eqtl" %in% names(data_mod$data)) {
+        data_mod$data[, eqtl := NULL]
+        tmp <- data.table::copy(data_mod$data)
+        data_mod$data <- NULL
+        data_mod$data <- tmp
+      }
 
-                  if(is.null(data_mod$data)) return(NULL)
+    })
 
-                   # browser()
+    #==========================================
+    # apply filtering of upstream variants
+    #==========================================
+    observeEvent(input$apply, {
 
-                   # step 1 - filter by common variants to both upstream and eqtl +/- filter
-                   # eqtl = T or F
-                   #
-                   # if("All" %in% input$datasets) {
-                   #   shinyjs::enable("tissue_combine_method")
-                   #
-                   # } else {
-                   #   shinyjs::disable("tissue_combine_method")
-                   #   # step 2 - turn rows where STUDY_TISSUE_METHOD not in input$datasets
-                   # }
+      # require the inputs (i.e. not NULL)
+      req(data_mod$data, input$datasets, input$beta_dir, input$dataset_combine_method, input$source_2, input$source_2_filter)
 
-                   # step 3 - if beta_dir != "Any"
-                   # do a join of the betas (separate dt) and flag TRUE / F depending, then set main dt
+      # which eQTL dataset to use?
+      if("All" %in% input$datasets) {
 
-                   # step 4 - if tissue_combine_method != "Don't combine"
-                   # do a group by and determine with one to keep TRUE
+        data_mod$data[, eqtl := TRUE]
 
+      } else {
 
-      # # work out which variants in the upstream data is present in the eQTL data
-      # source_id  <- input$source_2
-      # filter_col <- input$source_2_filter
-      # row_idx    <- which(app$modules[[source_id]]$data[[filter_col]]==TRUE)
-      # variants   <- app$modules[[source_id]]$data[row_idx, "RSID"]
-      # plot_data  <- data_mod$data[RSID %in% variants, ]
+        data_mod$data[, eqtl := ifelse(STUDY_TISSUE_METHOD %in% input$datasets,
+                                       rep(TRUE, nrow(data_mod$data)),
+                                       rep(FALSE, nrow(data_mod$data)))]
 
+        if(input$dataset_combine_method == "Maximum abs(BETA)") {
+
+          data_mod$data[eqtl==TRUE, eqtl := ifelse(abs(BETA) == max(abs(BETA), na.rm=T) & !duplicated(abs(BETA) == max(abs(BETA), na.rm=T)), # ensure only one TRUE per RSID (BETA==max might give >1 value)
+                                                   rep(TRUE,.N), rep(FALSE,.N)), by=RSID]
+
+        } else if(input$dataset_combine_method == "Lowest P-value") {
+
+          data_mod$data[eqtl==TRUE, eqtl := ifelse(P == min(P, na.rm=T) & !duplicated(P == min(P, na.rm=T)), # ensure only one TRUE per RSID (P==min(P) might give >1 value)
+                                                   rep(TRUE,.N), rep(FALSE,.N)), by=RSID]
+
+        } else if(input$dataset_combine_method == "Largest sample size") {
+
+          data_mod$data[eqtl==TRUE, eqtl := ifelse(N == max(N, na.rm=T) & !duplicated(N == max(N, na.rm=T)), # ensure only one TRUE per RSID (N==max(N) might give >1 value)
+                                                   rep(TRUE,.N), rep(FALSE,.N)), by=RSID]
+
+        }
+
+      }
+
+      # which variants are also in the upstream source data
+      if(input$source_2 != "" && !is.null(app$modules[[input$source_2]]$data)) {
+
+        if(input$source_2_filter != "All") {
+
+          # all RSIDs where the filter condition in the upstream data is TRUE
+          upstream_variants <- app$modules[[input$source_2]]$data$RSID[ which(app$modules[[input$source_2]]$data[[input$source_2_filter]]==TRUE) ]
+
+        } else {
+
+          # all RSIDs in the upstream data
+          upstream_variants <- app$modules[[input$source_2]]$data$RSID
+
+        }
+
+        # find the corresponding variants in the eQTL data; set false any not in the upstream, else carry the eqtl flag forward
+        data_mod$data[, eqtl := ifelse(!RSID %in% upstream_variants, FALSE, eqtl)]
+
+      }
+
+      # beta directionality - requires harmonisation
+      if(input$source_2 != "" && !is.null(app$modules[[input$source_2]]$data) && input$beta_dir != "Any") {
+
+        # relevant eqtl data and source data so far
+        eqtl_data   <- data_mod$data[eqtl==TRUE, list(SNP=RSID,CHR,BP,EA,OA,EAF,BETA,P)]
+        source_data <- app$modules[[input$source_2]]$data[RSID %in% eqtl_data$SNP, list(SNP=RSID, CHR,BP,EA,OA,EAF,BETA,P)]
+
+        # harmonise the data
+        harm_dat <- genepi.utils::harmonise(gwas1 = eqtl_data,
+                                            gwas2 = source_data,
+                                            gwas1_trait = "eqtl",
+                                            gwas2_trait = "source",
+                                            merge = c("SNP"="SNP"))
+
+        # which direction?
+        if(input$beta_dir == "Concordant") {
+
+          harm_dat <- harm_dat[sign(BETA_eqtl) == sign(BETA_source), ]
+
+        } else if(input$beta_dir == "Disconcordant") {
+
+          harm_dat <- harm_dat[sign(BETA_eqtl) != sign(BETA_source), ]
+
+        }
+
+        # flag which ones are left, else carry the eqtl flag forward (allow palindromic SNPs to carry forward)
+        data_mod$data[, eqtl := ifelse(!RSID %in% harm_dat$SNP_eqtl[harm_dat$keep | harm_dat$palindromic] , FALSE, eqtl)]
+
+      }
+
+      # force memory location change (reactivity doesnt work with inplace data.table modifications)
+      tmp <- data.table::copy(data_mod$data)
+      data_mod$data <- NULL
+      data_mod$data <- tmp
     })
 
     #==========================================
@@ -267,6 +340,8 @@ mod_eqtl_server <- function(id, app){
       validate(
         need(!is.null(data_mod$data), 'No data imported, click the import button')
       )
+
+      print("plotting")
 
       p <- ggplot2::ggplot(data = data_mod$data,
                            mapping = ggplot2::aes(x = BP, y = nlog10P, color=STUDY_TISSUE, shape=QUANT_METHOD)) +
@@ -299,14 +374,26 @@ mod_eqtl_server <- function(id, app){
                           inherit.aes=FALSE, min.segment.length = 0.25)
       }
 
+
       # if we have computed the eQTL flag then plot
       if("eqtl" %in% names(data_mod$data)) {
 
-        p <- p +
-          geom_vline(data = data_mod$data[eqtl==TRUE, ], mapping=aes(xintercept=BP), linetype="dotted", color= "darkred") +
-          geom_point(data = data_mod$data[eqtl==TRUE, ], mapping=aes(x=BP, y=nlog10P), inherit.aes=FALSE, size=3, fill="red",color="red",shape=24) +
-          geom_label_repel(data = data_mod$data[eqtl==TRUE, ], mapping=aes(label=RSID, x=BP, y=nlog10P), max.overlaps=Inf, inherit.aes=FALSE) +
-          labs(color = "Upstream hit", fill = "Upstream hit")
+        # draw large triangles, lines and labels if less than 50 to draw; otherwise small triangles
+        if(sum(data_mod$data$eqtl, na.rm=TRUE) < 50) {
+
+          p <- p +
+            geom_vline(data = data_mod$data[eqtl==TRUE, ], mapping=aes(xintercept=BP), linetype="dotted", color= "darkred") +
+            geom_point(data = data_mod$data[eqtl==TRUE, ], mapping=aes(x=BP, y=nlog10P), inherit.aes=FALSE, size=3, fill="red",color="red",shape=24) +
+            geom_label_repel(data = data_mod$data[eqtl==TRUE, ], mapping=aes(label=RSID, x=BP, y=nlog10P), max.overlaps=Inf, inherit.aes=FALSE) +
+            labs(color = "Upstream hit", fill = "Upstream hit")
+
+        } else {
+
+          p <- p +
+            geom_point(data = data_mod$data[eqtl==TRUE, ], mapping=aes(x=BP, y=nlog10P), inherit.aes=FALSE, size=1, fill="red",color="red",shape=24) +
+            labs(color = "Upstream hit", fill = "Upstream hit")
+
+        }
 
       }
 

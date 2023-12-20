@@ -9,7 +9,8 @@ import_ieu_gwas(
   chr = NULL,
   bp_start = NULL,
   bp_end = NULL,
-  build = "GRCh37"
+  build = "GRCh37",
+  pthresh = NULL
 )
 }
 \arguments{
@@ -20,6 +21,10 @@ import_ieu_gwas(
 \item{bp_start}{.}
 
 \item{bp_end}{.}
+
+\item{build}{.}
+
+\item{pthresh}{.}
 }
 \value{
 a data.frame

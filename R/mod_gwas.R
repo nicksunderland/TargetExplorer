@@ -21,11 +21,10 @@ mod_gwas_ui <- function(id){
                                hr(),
                                fluidRow(
                                  column(6, p(strong("Clumping"))),
-                                 column(4, actionButton(inputId = ns("clump"),
+                                 column(3, actionButton(inputId = ns("clump"),
                                                         label   = "Clump data")),
-                                 column(2, prettyCheckbox(inputId = ns("select_all"),
-                                                          label   = strong("All"),
-                                                          shape   = "curve")),
+                                 column(3, actionButton(inputId = ns("reset"),
+                                                        label   = "Reset"))
                                ),
                                fluidRow(
                                  column(6,
@@ -36,7 +35,7 @@ mod_gwas_ui <- function(id){
                                                         grid     = TRUE),
                                         sliderTextInput(inputId  = ns("clump_r2"),
                                                         label    = "r2",
-                                                        choices  = c(0.0001,0.001,0.01,seq(0.1,1,0.1)),
+                                                        choices  = c(0.0001,0.001,0.01,seq(0.1,0.9,0.1),0.9999),
                                                         selected = 0.001,
                                                         grid     = TRUE)
                                         ),
@@ -48,7 +47,7 @@ mod_gwas_ui <- function(id){
                                                         grid     = TRUE),
                                         sliderTextInput(inputId  = ns("clump_kb"),
                                                         label    = "kb",
-                                                        choices  = seq(0,1000,50),
+                                                        choices  = c(1,seq(0,1000,50)[-1]),
                                                         selected = 250,
                                                         grid     = TRUE)
                                         )
@@ -77,7 +76,7 @@ mod_gwas_server <- function(id, app){
     cli::cli_alert_info(paste0("initialising mod_gwas_server(ns=",ns("foo"),")"))
 
     # R CMD checks
-    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- NULL
+    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
 
     #==========================================
     # Data module server for the GWAS module
@@ -176,30 +175,15 @@ mod_gwas_server <- function(id, app){
 
 
     #==========================================
-    # Select all checkbox
+    # reset clumping
     #==========================================
-    observeEvent(input$select_all, {
+    observeEvent(input$reset, {
 
-      # check data
-      if(is.null(data_mod$data)) return(NULL)
-
-      # add index flag
-      if(input$select_all) {
-
-        data_mod$data$index <- TRUE
-        if("clump" %in% names(data_mod$data)) {
-          data_mod$data$clump <- NULL
-        }
-
-      } else {
-
-        if("clump" %in% names(data_mod$data)) {
-          data_mod$data$clump <- NULL
-        }
-        if("index" %in% names(data_mod$data)) {
-          data_mod$data$index <- NULL
-        }
-
+      if(all(c("clump","index") %in% names(data_mod$data))) {
+        data_mod$data[, c("clump","index") := NULL]
+        tmp <- data.table::copy(data_mod$data)
+        data_mod$data <- NULL
+        data_mod$data <- tmp
       }
 
     })
@@ -246,7 +230,7 @@ mod_gwas_server <- function(id, app){
                                              r2        = input$clump_r2,
                                              kb        = input$clump_kb,
                                              plink2    = get_plink2_exe(),
-                                             plink_ref = plink_ref) |> as.data.frame()
+                                             plink_ref = plink_ref) #|> as.data.frame()
 
         if(any(data_mod$data$index)) {
           shiny::incProgress(3/4, detail = paste("Complete"))

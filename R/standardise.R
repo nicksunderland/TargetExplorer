@@ -10,6 +10,9 @@
 #'
 standardise_data <- function(dat, source, build_from=NULL, build_to=NULL) {
 
+  # R CMD checks
+  nlog10P <- P <- NULL
+
   # checks
   source <- match.arg(source, choices = c("ebi_eqtl_api","internal","ieu_opengwas","ebi_gwas"))
   if(is.null(dat)) return(NULL)

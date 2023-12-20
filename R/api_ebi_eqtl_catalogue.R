@@ -12,10 +12,9 @@
 #' @param chr .
 #' @param bp_start .
 #' @param bp_end .
-#' @param cptid .
-#' @param rsid .
 #' @param gene_id .
-#' @param nlog10p .
+#' @param pthresh .
+#' @param method .
 #' @param build .
 #' @return a data.frame
 #' @export
@@ -30,11 +29,12 @@ import_ebi_eqtl <- function(study_info_table,
                             chr      = NULL,
                             bp_start = NULL,
                             bp_end   = NULL,
-                            cptid    = NULL,
-                            rsid     = NULL,
                             gene_id  = NULL,
-                            nlog10p  = NULL,
+                            pthresh  = NULL,
                             build    = "GRCh37") {
+
+  # R CMD checks
+  STUDY <- TISSUE <- QUANT_METHOD <- pvalue <- N <- an <- NULL
 
   # checks
   build <- match.arg(build, choices = c("GRCh37","GRCh38"))
@@ -78,6 +78,7 @@ import_ebi_eqtl <- function(study_info_table,
         responses[, STUDY        := dataset_ids[dataset_ids$dataset_id==id, "catalogue"]]
         responses[, TISSUE       := dataset_ids[dataset_ids$dataset_id==id, "dataset"]]
         responses[, QUANT_METHOD := dataset_ids[dataset_ids$dataset_id==id, "quant_method"]]
+        responses <- responses[pvalue <= pthresh, ]
 
         # update progress
         shiny::incProgress(1/n, detail = paste("\nDataset", id, "complete"))

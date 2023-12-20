@@ -12,10 +12,8 @@ import_ebi_eqtl(
   chr = NULL,
   bp_start = NULL,
   bp_end = NULL,
-  cptid = NULL,
-  rsid = NULL,
   gene_id = NULL,
-  nlog10p = NULL,
+  pthresh = NULL,
   build = "GRCh37"
 )
 }
@@ -26,19 +24,17 @@ import_ebi_eqtl(
 
 \item{tissues}{.}
 
+\item{method}{.}
+
 \item{chr}{.}
 
 \item{bp_start}{.}
 
 \item{bp_end}{.}
 
-\item{cptid}{.}
-
-\item{rsid}{.}
-
 \item{gene_id}{.}
 
-\item{nlog10p}{.}
+\item{pthresh}{.}
 
 \item{build}{.}
 }

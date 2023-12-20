@@ -38,7 +38,6 @@ mod_data_ui <- function(id){
 #' Takes the parent module UI `id` and then populates it's data module with only those
 #' data sources that are relevant to that particular module. e.g. the GWAS module can
 #' import from GWAS sources, but doesn't need access to the eQTL sources etc.
-#' @param parent_id a string, the parent id to parse e.g. "GWAS_1", "GWAS_2", "Coloc_0" ... etc.
 #' @return a character vector of choices to populate the `selectInput(inputId  = ns("data_source"))` UI element
 #' @noRd
 #'
@@ -252,7 +251,8 @@ mod_data_server <- function(id, gene_module){
                                   chr      = gene_module$chr,
                                   bp_start = gene_module$start - gene_module$flanks_kb*1000,
                                   bp_end   = gene_module$end + gene_module$flanks_kb*1000,
-                                  build    = gene_module$build)
+                                  build    = gene_module$build,
+                                  pthresh  = input$pval)
 
 
       # EBI eQTL catalogue API
@@ -266,7 +266,7 @@ mod_data_server <- function(id, gene_module){
                                   bp_start = gene_module$start - gene_module$flanks_kb*1000,
                                   bp_end   = gene_module$end + gene_module$flanks_kb*1000,
                                   gene_id  = gene_module$id,
-                                  nlog10p  = -log10(input$pval),
+                                  pthresh  = input$pval,
                                   build    = gene_module$build)
 
         v$data2 <- read_gene_data(source = "gencode",
@@ -282,7 +282,8 @@ mod_data_server <- function(id, gene_module){
                                      dataset = input$`filter-dataset`,
                                      chrom   = gene_module$chr,
                                      start   = gene_module$start - gene_module$flanks_kb*1000,
-                                     end     = gene_module$end + gene_module$flanks_kb*1000)
+                                     end     = gene_module$end + gene_module$flanks_kb*1000,
+                                     pthresh = input$pval)
 
         v$data2 <- read_gene_data(source = "gencode",
                                   chrom  = gene_module$chr,

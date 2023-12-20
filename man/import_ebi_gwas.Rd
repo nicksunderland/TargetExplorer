@@ -9,7 +9,8 @@ import_ebi_gwas(
   chr = NULL,
   bp_start = NULL,
   bp_end = NULL,
-  build = "GRCh38"
+  build = "GRCh38",
+  pthresh = NULL
 )
 }
 \arguments{
@@ -20,6 +21,10 @@ import_ebi_gwas(
 \item{bp_start}{.}
 
 \item{bp_end}{.}
+
+\item{build}{.}
+
+\item{pthresh}{.}
 }
 \value{
 a data.frame

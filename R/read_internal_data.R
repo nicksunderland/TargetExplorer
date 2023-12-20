@@ -32,25 +32,29 @@ get_data_directory <- function(type=NULL) {
 
 get_available_data_sources <- function() {
 
-  source_info <- data.frame(catalogue=character(), dataset=character(), path=character())
+  types <- c("gwas","eqtl","pqtl","genes")
 
-  for(type in c("gwas","eqtl","pqtl","genes")) {
+  source_info <- lapply(types, function(type) {
 
-    s <- data.frame(path      = list.files(get_data_directory(type), full.names=TRUE,  recursive=FALSE),
-                    dataset   = list.files(get_data_directory(type), full.names=FALSE, recursive=FALSE))
+    s <- data.table::data.table(path    = list.files(get_data_directory(type), full.names=TRUE,  recursive=FALSE),
+                                dataset = list.files(get_data_directory(type), full.names=FALSE, recursive=FALSE))
 
     if(nrow(s)>0) {
-      s$catalogue <- type
-      source_info <- rbind(source_info, s)
+      return(s)
+    } else {
+      return(NULL)
     }
 
-  }
+  }) |> `names<-`(types) |> data.table::rbindlist(idcol = "catalogue")
 
   return(source_info)
 }
 
 
-read_internal_data <- function(type, dataset, chrom, start, end) {
+read_internal_data <- function(type, dataset, chrom, start, end, pthresh) {
+
+  # R CMD checks
+  P <- NULL
 
   shiny::withProgress(message = 'Reading package data', value = 0, {
     shiny::incProgress(1/4, detail = paste("Dataset", dataset, "..."))
@@ -78,6 +82,9 @@ read_internal_data <- function(type, dataset, chrom, start, end) {
 
     # standardise data.frame
     d <- standardise_data(d, source="internal")
+
+    # apply pvalue threshold
+    d <- d[P <= pthresh, ]
 
     shiny::incProgress(3/4, detail = paste("Complete"))
   })

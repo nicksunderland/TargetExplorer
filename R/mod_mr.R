@@ -25,6 +25,15 @@ mod_mr_ui <- function(id){
                                                        choices = c("")))
                                ),
                                fluidRow(
+                                 column(6, selectInput(inputId = ns("source_1_join"),
+                                                       label   = "filter by:",
+                                                       choices = c(""))),
+                                 column(6, selectInput(inputId = ns("source_2_join"),
+                                                       label   = "filter by:",
+                                                       choices = c("")))
+                               ),
+                               hr(),
+                               fluidRow(
                                  column(6, prettyCheckboxGroup(inputId = ns("mr_method"),
                                                                label   = "MR method",
                                                                choices = c("mr_wald_ratio","mr_egger_regression","mr_weighted_median",
@@ -87,7 +96,7 @@ mod_mr_server <- function(id, app){
     ns <- session$ns
 
     # R CMD checks
-    # BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- NULL
+    beta.exposure <- beta.outcome <- bp <- RSID <- SNP <- NULL
 
     #==========================================
     # Data module server for the MR module
@@ -102,10 +111,9 @@ mod_mr_server <- function(id, app){
 
       # check data
       validate(
-        need(!is.null(app$modules[[input$source_1]]$data) && !is.null(app$modules[[input$source_2]]$data), paste0('No data imported for [', input$source_1, ']')),
-        need(any(c("index","eqtl","coloc") %in% names(app$modules[[input$source_1]]$data)), paste0('No clumped or eQTL data found in [', input$source_1, ']')),
-        need(any(c("index","eqtl","coloc") %in% names(app$modules[[input$source_2]]$data)), paste0('No clumped or eQTL data found in [', input$source_2, ']')),
-        need(!is.null(app$modules[[id]]$data) && !is.null(app$modules[[id]]$data2), paste0('No MR data found, have you clicked `Run MR`?'))
+        need(!is.null(app$modules[[input$source_1]]$data), paste0('No data imported for [', input$source_1, ']')),
+        need(!is.null(app$modules[[input$source_2]]$data), paste0('No data imported for [', input$source_2, ']')),
+        need(!is.null(data_mod$data) && !is.null(data_mod$data2), paste0('No MR data found, have you clicked `Run MR`?'))
       )
 
       # create the MR plot
@@ -211,8 +219,10 @@ mod_mr_server <- function(id, app){
     # Observe additions / deletions of modules
     #==========================================
     observeEvent(app$modules, {
-      updateSelectInput(session, inputId="source_1", choices=names(app$modules)[names(app$modules)!="gene"])
-      updateSelectInput(session, inputId="source_2", choices=names(app$modules)[names(app$modules)!="gene"])
+      updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules) %in% c(id,"gene")])
+      updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules) %in% c(id,"gene")])
+      updateSelectInput(session, inputId="source_1_join", choices=c("-", names(app$modules)[!names(app$modules) %in% c(id,"gene")]))
+      updateSelectInput(session, inputId="source_2_join", choices=c("-", names(app$modules)[!names(app$modules) %in% c(id,"gene")]))
     })
 
 
@@ -221,10 +231,12 @@ mod_mr_server <- function(id, app){
     #==========================================
     observeEvent(list(input$source_1,input$source_2), {
       if(is.null(input$source_1) || input$source_1=="") {
-        updateSelectInput(session, inputId="source_1", choices=names(app$modules)[names(app$modules)!="gene"])
+        updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules) %in% c(id,"gene")])
+        updateSelectInput(session, inputId="source_1_join", choices=c("-", names(app$modules)[!names(app$modules) %in% c(id,"gene")]))
       }
       if(is.null(input$source_2) || input$source_2=="") {
-        updateSelectInput(session, inputId="source_2", choices=names(app$modules)[names(app$modules)!="gene"])
+        updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules) %in% c(id,"gene")])
+        updateSelectInput(session, inputId="source_2_join", choices=c("-", names(app$modules)[!names(app$modules) %in% c(id,"gene")]))
       }
     })
 
@@ -234,6 +246,8 @@ mod_mr_server <- function(id, app){
     #==========================================
     observeEvent(input$run_mr, {
 
+      req(app$modules[[input$source_1]]$data, app$modules[[input$source_2]]$data)
+
       # progress bar
       shiny::withProgress(message = 'Running MR analysis', value = 0, {
         n=8
@@ -242,21 +256,59 @@ mod_mr_server <- function(id, app){
         # possible instrument selection steps
         iv_selection <- c("index","eqtl","coloc")
 
-        # check data
-        if(is.null(app$modules[[input$source_1]]$data) &&
-           is.null(app$modules[[input$source_2]]$data) &&
-           !any(iv_selection %in% names(app$modules[[input$source_1]]$data)) &&
-           !any(iv_selection %in% names(app$modules[[input$source_2]]$data))) return(NULL)
-
-        # get type of data / filter column (as an integer)
+        # get type of data / filter column
         cols_1 <- names(app$modules[[input$source_1]]$data)
         cols_2 <- names(app$modules[[input$source_2]]$data)
-        filter_1 <- which(cols_1 %in% iv_selection)
-        filter_2 <- which(cols_2 %in% iv_selection)
+        filter_col_1 <- cols_1[ which(cols_1 %in% iv_selection) ]
+        filter_col_2 <- cols_2[ which(cols_2 %in% iv_selection) ]
+
+        # apply the filter column (if present) to get the variants
+        if(length(filter_col_1)==0) {
+          variants_source_1 <- app$modules[[input$source_1]]$data[["RSID"]]
+        } else {
+          variants_source_1 <- app$modules[[input$source_1]]$data[get(filter_col_1)==TRUE, RSID]
+        }
+
+        # apply the filter column (if present) to get the variants
+        if(length(filter_col_2)==0) {
+          variants_source_2 <- app$modules[[input$source_2]]$data[["RSID"]]
+        } else {
+          variants_source_2 <- app$modules[[input$source_2]]$data[get(filter_col_2)==TRUE, RSID]
+        }
+
+        # filter the source 1 variants by those in the "filter by/source_1_join" option
+        if(input$source_1_join != "-") {
+          cols_1_join <- names(app$modules[[input$source_1_join]]$data)
+          filter_col_1_join <- cols_1_join[ which(cols_1_join %in% iv_selection) ]
+          if(length(filter_col_1_join)==0) {
+            variants_source_1_join <- app$modules[[input$source_1_join]]$data[["RSID"]]
+          } else {
+            variants_source_1_join <- app$modules[[input$source_1_join]]$data[get(filter_col_1_join)==TRUE, RSID]
+          }
+          variants_source_1 <- variants_source_1[variants_source_1 %in% variants_source_1_join]
+        }
+
+        # filter the source 2 variants by those in the "filter by/source_2_join" option
+        if(input$source_2_join != "-") {
+          cols_2_join <- names(app$modules[[input$source_2_join]]$data)
+          filter_col_2_join <- cols_2_join[ which(cols_2_join %in% iv_selection) ]
+          if(length(filter_col_2_join)==0) {
+            variants_source_2_join <- app$modules[[input$source_2_join]]$data[["RSID"]]
+          } else {
+            variants_source_2_join <- app$modules[[input$source_2_join]]$data[get(filter_col_2_join)==TRUE, RSID]
+          }
+          variants_source_2 <- variants_source_2[variants_source_2 %in% variants_source_2_join]
+        }
+
+        # warn if we have filter out all the variants
+        if(length(variants_source_1)==0 || length(variants_source_2)==0) {
+          showNotification("No variants left when using `filter by:` option(s)", type="warning")
+          return(NULL)
+        }
 
         # exposure data
         shiny::incProgress(1/n, detail = "Formatting exposure")
-        exp <- TwoSampleMR::format_data(dat = app$modules[[input$source_1]]$data[ app$modules[[input$source_1]]$data[[filter_1]] %in% TRUE, ],
+        exp <- TwoSampleMR::format_data(dat = app$modules[[input$source_1]]$data[RSID %in% variants_source_1, ] |> as.data.frame(),
                                         type = "exposure",
                                         snp_col = "RSID",
                                         beta_col = "BETA",
@@ -269,7 +321,8 @@ mod_mr_server <- function(id, app){
                                         pos_col = "BP")
 
         # if no matching SNPs in outcome then return NULL and warn
-        matching_snps = app$modules[[input$source_2]]$data$RSID %in% exp$SNP
+        matching_snps = app$modules[[input$source_2]]$data$RSID %in% exp$SNP &
+                        app$modules[[input$source_2]]$data$RSID %in% variants_source_2
         if(!any(matching_snps)) {
           showNotification(paste("No matching outcome SNPs for the", nrow(exp), "exposure SNPs provided"), type="error")
           return(NULL)
@@ -277,7 +330,7 @@ mod_mr_server <- function(id, app){
 
         # format the outcome data
         shiny::incProgress(1/n, detail = "Formatting outcome")
-        out <- TwoSampleMR::format_data(dat = app$modules[[input$source_2]]$data[ matching_snps, ] |> as.data.frame(),
+        out <- TwoSampleMR::format_data(dat = app$modules[[input$source_2]]$data[matching_snps, ] |> as.data.frame(),
                                         type = "outcome",
                                         snp_col = "RSID",
                                         beta_col = "BETA",

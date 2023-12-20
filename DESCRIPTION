@@ -11,8 +11,10 @@ Imports:
     config (>= 0.3.2),
     data.table,
     datamods,
+    dplyr,
     fst,
     genepi.utils,
+    ggfortify,
     ggplot2,
     ggrepel,
     glue,
@@ -23,7 +25,9 @@ Imports:
     shiny (>= 1.8.0),
     shinyjs,
     shinyWidgets,
+    tidyr,
     TwoSampleMR,
+    viridis,
     yaml
 Encoding: UTF-8
 LazyData: true

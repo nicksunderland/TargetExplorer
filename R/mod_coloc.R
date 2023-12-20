@@ -16,7 +16,7 @@ mod_coloc_ui <- function(id){
                   sidebarPanel(p(strong(paste0("Controls [",id,"]"))),
                                width = 3,
                                hr(),
-                               mod_data_ui(id=ns("data"), parent_id=id),
+                               mod_data_ui(id=ns("data")),
                                hr(),
                                fluidRow(
                                  column(6,
@@ -103,7 +103,8 @@ mod_coloc_server <- function(id, app){
     ns <- session$ns
 
     # R CMD checks
-    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- nlog10P <- position <- tissue_label <- NULL
+    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- nlog10P <- position <- tissue_label <- SNP.PP.H4 <- P <- NULL
+    TISSUE <- index <- NULL
 
     #==========================================
     # Data module server for the Coloc module
