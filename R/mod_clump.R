@@ -99,7 +99,7 @@ mod_clump_server <- function(id, gene_module, data_module){
     #==========================================
     # reset clumping
     #==========================================
-    observeEvent(input$reset, {
+    session$userData[[ns("reset")]] <- observeEvent(input$reset, {
 
       if(all(c("clump","index") %in% names(data_module$data))) {
         data_module$data[, c("clump","index") := NULL]
@@ -114,7 +114,7 @@ mod_clump_server <- function(id, gene_module, data_module){
     #==========================================
     # Clump button
     #==========================================
-    observeEvent(input$clump, {
+    session$userData[[ns("clump")]] <- observeEvent(input$clump, {
 
       # check data
       if(is.null(data_module$data)) return(NULL)

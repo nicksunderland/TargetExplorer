@@ -14,10 +14,11 @@ mod_gwas_ui <- function(id){
   div(
     id = id,
     sidebarLayout(position = "right",
-                  sidebarPanel(p(strong(paste0("Controls [",id,"]"))),
-                               width = 3,
+                  sidebarPanel(width = 3,
+                               fluidRow(column(10, p(strong(paste0("Controls [",id,"]")))),
+                                        column(2,  mod_remove_ui(id=ns("remove")))),
                                hr(),
-                               mod_data_ui(id=paste0(id,"-data")),
+                               mod_data_ui(id=ns("data")),
                                hr(),
                                mod_clump_ui(id=ns("clump"))
                   ), # sidebar panel end
@@ -46,11 +47,14 @@ mod_gwas_server <- function(id, app){
     # R CMD checks
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
 
+
     #==========================================
-    # Data and clump module servers for the GWAS module
+    # Data, clump, and remove (sub)module servers for the GWAS module
     #==========================================
-    data_mod  <- mod_data_server(id="data", gene_module=app$modules$gene)
-    clump_mod <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
+    data_mod   <- mod_data_server(id="data", gene_module=app$modules$gene)
+    clump_mod  <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
+    remove_mod <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
+
 
     #==========================================
     # Manhattan / LocusZoom plot

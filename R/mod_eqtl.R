@@ -13,10 +13,11 @@ mod_eqtl_ui <- function(id){
   div(
     id = id,
     sidebarLayout(position = "right",
-                  sidebarPanel(p(strong(paste0("Controls [",id,"]"))),
-                               width = 3,
+                  sidebarPanel(width = 3,
+                               fluidRow(column(10, p(strong(paste0("Controls [",id,"]")))),
+                                        column(2,  mod_remove_ui(id=ns("remove")))),
                                hr(),
-                               mod_data_ui(id=paste0(id,"-data")),
+                               mod_data_ui(id=ns("data")),
                                hr(),
                                mod_clump_ui(id=ns("clump")),
                                hr(),
@@ -81,14 +82,15 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     # Data module server for the eQTL module
     #==========================================
-    data_mod  <- mod_data_server(id="data", gene_module=app$modules$gene)
-    clump_mod <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
+    data_mod   <- mod_data_server(id="data", gene_module=app$modules$gene)
+    clump_mod  <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
+    remove_mod <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
 
 
     #==========================================
     # Observe additions / deletions of upstream source modules
     #==========================================
-    observeEvent(app$modules, {
+    session$userData[[ns("app-modules")]] <- observeEvent(app$modules, {
       updateSelectInput(session, inputId="source_2", choices=c("off", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
     })
 
@@ -96,7 +98,7 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     # Observe input selection for choices init as observing just app$modules doesn't work at module init...
     #==========================================
-    observeEvent(input$source_2, {
+    session$userData[[ns("source_2")]] <- observeEvent(input$source_2, {
       if(is.null(input$source_2) || input$source_2=="") {
         updateSelectInput(session, inputId="source_2", choices=c("off", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
       }
@@ -111,7 +113,7 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     # Process input data when it changes / is loaded; update GUI also
     #==========================================
-    observeEvent(data_mod$data, {
+    session$userData[[ns("data")]] <- observeEvent(data_mod$data, {
       req(data_mod$data)
 
       # order by beta for nicer plotting
@@ -198,7 +200,7 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     # reset filtering of upstream variants
     #==========================================
-    observeEvent(input$reset, {
+    session$userData[[ns("reset")]] <- observeEvent(input$reset, {
 
       if("eqtl" %in% names(data_mod$data)) {
         data_mod$data[, eqtl := NULL]
@@ -212,7 +214,7 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     # apply filtering of upstream variants
     #==========================================
-    observeEvent(input$apply, {
+    session$userData[[ns("apply")]] <- observeEvent(input$apply, {
 
       # require the inputs (i.e. not NULL)
       req(data_mod$data, input$datasets, input$beta_dir, input$dataset_combine_method, input$source_2, input$source_2_filter)

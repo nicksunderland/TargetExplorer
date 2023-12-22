@@ -13,91 +13,36 @@ app_server <- function(input, output, session) {
     "gene"  = mod_gene_server(id="gene")
   ))
 
+  # the types of module that can be added
+  module_options <- list(
+    'GWAS'  = list(svr='mod_gwas_server',  ui='mod_gwas_ui',  id_idx=0),
+    'eQTL'  = list(svr='mod_eqtl_server',  ui='mod_eqtl_ui',  id_idx=0),
+    'Coloc' = list(svr='mod_coloc_server', ui='mod_coloc_ui', id_idx=0),
+    'MR'    = list(svr='mod_mr_server',    ui='mod_mr_ui',    id_idx=0)
+  )
 
   # observe the add step button
   observeEvent(input$add_step, {
     cli::cli_alert_info("app_server::observeEvent(input$add_step)")
 
-    # get the module type to add and how many already exist
-    add_what <- input$module_type
-    how_many <- sum(grepl(input$module_type, names(app$modules)))
+    # generate a unique id for the module e.g. 'GWAS_0'
+    id <- paste0(input$module_type,"_",module_options[[input$module_type]][['id_idx']])
 
-    # generate a unique id; zero indexed
-    this_id  <- paste0(input$module_type,"_",how_many)
+    # create the module server and add to the list of app modules
+    app$modules[[id]] <- do.call(module_options[[input$module_type]][['svr']], list(id=id, app=app))
 
-    # add the correct module type
-    if(add_what=="GWAS") {
+    # create the module ui
+    ui <- do.call(module_options[[input$module_type]][['ui']], list(id=id))
 
-      # create the module and add to the list of active modules
-      app$modules[[this_id]] <- mod_gwas_server(id = this_id, app = app)
+    # add the module UI to the main UI
+    insertUI(selector="#module_placeholder", ui=ui)
 
-      # add the correct UI type
-      insertUI(selector="#add_here", ui=mod_gwas_ui(id=this_id))
-
-    } else if(add_what=="eQTL") {
-
-        # create the module and add to the list of active modules
-        app$modules[[this_id]] <- mod_eqtl_server(id = this_id, app = app)
-
-        # add the correct UI type
-        insertUI(selector="#add_here", ui=mod_eqtl_ui(id=this_id))
-
-
-    } else if(add_what=="Coloc") {
-
-      # create the module and add to the list of active modules
-      app$modules[[this_id]] <- mod_coloc_server(id = this_id, app = app)
-
-      # add the correct UI type
-      insertUI(selector="#add_here", ui=mod_coloc_ui(id=this_id))
-
-    } else if(add_what=="MR") {
-
-      # create the module and add to the list of active modules
-      app$modules[[this_id]] <- mod_mr_server(id = this_id, app = app)
-
-      # add the correct UI type
-      insertUI(selector="#add_here", ui=mod_mr_ui(id=this_id))
-
-    }
-
-    # update the active_modules select box
-    updateSelectInput(inputId = "active_modules",
-                      choices = names(app$modules)[!names(app$modules) %in% c("gene")])
-
-    names(app$modules) <- names(app$modules) # ?needed
+    # increment the index (I cant figure out how to remove all references to the id used to create
+    # a module, so for now need to create total unique, even if the module has previously been removed)
+    module_options[[input$module_type]][['id_idx']] <<- module_options[[input$module_type]][['id_idx']] + 1
 
   })
 
 
-  # observe the remove step button
-  observeEvent(input$remove_step, {
-    cli::cli_alert_info("app_server::observeEvent(input$remove_step)")
-
-    # get the id to remove
-    unwanted_step_id <- input$active_modules
-
-    # remove from the UI
-    removeUI(
-      selector = paste0("#",unwanted_step_id),
-      session = session
-    )
-
-    # remove the shiny inputs - this is a custom function (see this blog:
-    # https://appsilon.com/how-to-safely-remove-a-dynamic-shiny-module/
-    remove_shiny_inputs(
-      id = unwanted_step_id,
-      .input = input,
-      .session = session
-    )
-
-    # remove from the active_modules reactive list
-    app$modules[[unwanted_step_id]] <- NULL
-
-    # update the active_modules select box
-    updateSelectInput(inputId="active_modules",
-                      choices=names(app$modules)[!names(app$modules) %in% c("gene")])
-
-  })
 
 }

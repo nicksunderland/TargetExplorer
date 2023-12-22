@@ -13,8 +13,9 @@ mod_mr_ui <- function(id){
   div(
     id = id,
     sidebarLayout(position = "right",
-                  sidebarPanel(p(strong(paste0("Controls [",id,"]"))),
-                               width = 3,
+                  sidebarPanel(width = 3,
+                               fluidRow(column(10, p(strong(paste0("Controls [",id,"]")))),
+                                        column(2,  mod_remove_ui(id=ns("remove")))),
                                hr(),
                                fluidRow(
                                  column(6, selectInput(inputId = ns("source_1"),
@@ -101,7 +102,8 @@ mod_mr_server <- function(id, app){
     #==========================================
     # Data module server for the MR module
     #==========================================
-    data_mod <- mod_data_server(id="data", gene_module=app$modules$gene)
+    data_mod   <- mod_data_server(id="data", gene_module=app$modules$gene)
+    remove_mod <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
 
 
     #==========================================
@@ -218,7 +220,7 @@ mod_mr_server <- function(id, app){
     #==========================================
     # Observe additions / deletions of modules
     #==========================================
-    observeEvent(app$modules, {
+    session$userData[[ns("app-modules")]] <- observeEvent(app$modules, {
       updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules) %in% c(id,"gene")])
       updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules) %in% c(id,"gene")])
       updateSelectInput(session, inputId="source_1_join", choices=c("-", names(app$modules)[!names(app$modules) %in% c(id,"gene")]))
@@ -229,7 +231,7 @@ mod_mr_server <- function(id, app){
     #==========================================
     # Observe input selection for choices init as observing just app$modules doesn't work at module init...
     #==========================================
-    observeEvent(list(input$source_1,input$source_2), {
+    session$userData[[ns("sources")]] <- observeEvent(list(input$source_1,input$source_2), {
       if(is.null(input$source_1) || input$source_1=="") {
         updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules) %in% c(id,"gene")])
         updateSelectInput(session, inputId="source_1_join", choices=c("-", names(app$modules)[!names(app$modules) %in% c(id,"gene")]))
@@ -244,7 +246,7 @@ mod_mr_server <- function(id, app){
     #==========================================
     # Run MR button
     #==========================================
-    observeEvent(input$run_mr, {
+    session$userData[[ns("run_mr")]] <- observeEvent(input$run_mr, {
 
       req(app$modules[[input$source_1]]$data, app$modules[[input$source_2]]$data)
 

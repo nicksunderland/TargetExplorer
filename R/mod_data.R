@@ -199,13 +199,6 @@ mod_data_server <- function(id, gene_module){
 
 
     #==========================================
-    # severe element for the `datamods::select_group_ui` input selector UI above (used if source "EBI eQTL Catalogue" or "Local")
-    #==========================================
-
-
-
-
-    #==========================================
     # observe the import button
     #==========================================
     session$userData[[ns("import")]] <- observeEvent(input$import, {

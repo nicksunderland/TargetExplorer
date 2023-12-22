@@ -9,17 +9,14 @@
 #'
 mod_coloc_ui <- function(id){
   ns <- NS(id)
+  cli::cli_alert_info(paste0("initialising mod_coloc_ui(ns=",ns("foo"),")"))
   # need to wrap in div and give an id in order to remove (https://www.youtube.com/watch?app=desktop&v=W7ES6QYvN_c)
   div(
     id = id,
     sidebarLayout(position = "right",
                   sidebarPanel(width = 3,
-                               fluidRow(
-                                 column(10,
-                                        p(strong(paste0("Controls [",id,"]")))),
-                                 column(2,
-                                        actionButton(inputId=ns("remove_module"), width = "40px", label = "", icon = icon("trash-can")))
-                               ),
+                               fluidRow(column(10, p(strong(paste0("Controls [",id,"]")))),
+                                        column(2,  mod_remove_ui(id=ns("remove")))),
                                hr(),
                                fluidRow(
                                  column(6,
@@ -123,6 +120,7 @@ mod_coloc_ui <- function(id){
 mod_coloc_server <- function(id, app){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
+    cli::cli_alert_info(paste0("initialising mod_coloc_server(ns=",ns("foo"),")"))
 
     # R CMD checks
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- nlog10P <- position <- tissue_label <- SNP.PP.H4 <- P <- NULL
@@ -131,12 +129,14 @@ mod_coloc_server <- function(id, app){
     #==========================================
     # Data module server for the Coloc module
     #==========================================
-    data_mod <- mod_data_server(id="data", gene_module=app$modules$gene)
+    data_mod   <- mod_data_server(id="data", gene_module=app$modules$gene)
+    remove_mod <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
+
 
     #==========================================
     # Run coloc button
     #==========================================
-    observeEvent(input$run_coloc, {
+    session$userData[[ns("run_coloc")]] <- observeEvent(input$run_coloc, {
 
       # check data
       if(is.null(app$modules[[input$source_1]]$data) || is.null(app$modules[[input$source_2]]$data)) return(NULL)
@@ -246,7 +246,11 @@ mod_coloc_server <- function(id, app){
       data_mod$data <- dat
     })
 
-    observeEvent(input$credible_set_p, {
+
+    #==========================================
+    # Observe credible set P-value threshold
+    #==========================================
+    session$userData[[ns("credible_set_p")]] <- observeEvent(input$credible_set_p, {
 
       if(is.null(data_mod$data)) return(NULL)
       req("cumsum_pp_h4" %in% names(data_mod$data))
@@ -260,7 +264,7 @@ mod_coloc_server <- function(id, app){
     #==========================================
     # Observe additions / deletions of modules
     #==========================================
-    observeEvent(app$modules, {
+    session$userData[[ns("app-modules")]] <- observeEvent(app$modules, {
       updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules)  %in% c("gene",id)])
       updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules)  %in% c("gene",id)])
     })
@@ -269,7 +273,7 @@ mod_coloc_server <- function(id, app){
     #==========================================
     # Observe input selection for choices init as observing just app$modules doesn't work at module init...
     #==========================================
-    observeEvent(list(input$source_1,input$source_2), {
+    session$userData[[ns("sources")]] <- observeEvent(list(input$source_1,input$source_2), {
       if(is.null(input$source_1) || input$source_1=="") {
         updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules)  %in% c("gene",id)])
       }
@@ -282,7 +286,7 @@ mod_coloc_server <- function(id, app){
     #==========================================
     # Observe method input (SuSiE / single causal variant assumption)
     #==========================================
-    observeEvent(input$method, {
+    session$userData[[ns("method")]] <- observeEvent(input$method, {
       if(input$method == "SuSiE") {
         shinyjs::enable("ld_reference")
       } else if(input$method == "Single causal") {
