@@ -24,42 +24,16 @@ mod_eqtl_ui <- function(id){
                                  column(6,
                                         selectInput(inputId = ns("source_2"),
                                                     label   = "Upstream data",
-                                                    choices = c(""))
+                                                    choices = c("off"))
                                  ),
                                  column(6,
-                                        selectInput(inputId = ns("source_2_filter"),
-                                                    label   = "Upstream filter",
-                                                    choices = c("All"),
+                                        selectInput(inputId  = ns("source_2_filter"),
+                                                    label    = "Upstream filter",
+                                                    choices  = c("All"),
                                                     selected = "All")
-                                 )
-                               ),
-                               fluidRow(
-                                 column(6,
-                                        selectizeInput(inputId = ns("datasets"),
-                                                       label   = "Datasets",
-                                                       choices = c("All"),
-                                                       selected= "All",
-                                                       multiple= TRUE),
-                                        prettyRadioButtons(inputId = ns("beta_dir"),
-                                                           label   = "BETA dir",
-                                                           choices = c("Any","Concordant","Disconcordant"),
-                                                           selected = "Any",
-                                                           inline   = FALSE)
                                  ),
-                                 column(6,
-                                        selectInput(inputId = ns("dataset_combine_method"),
-                                                    label   = "Combine by",
-                                                    choices = c("Don't combine", "Maximum abs(BETA)","Lowest P-value","Largest sample size"),
-                                                    selected = "Largest sample size"),
-                                        actionButton(inputId = ns("apply"),
-                                                     label   = "Apply"),
-                                        actionButton(inputId = ns("reset"),
-                                                     width   = "40px",
-                                                     label   = "",
-                                                     icon    = icon("rotate-left"))
-                                 )
                                ),
-
+                               uiOutput(ns("upstream_controls"))
                   ), # sidebar panel end
                   mainPanel(width = 9,
                             # Locus zoom plot
@@ -115,7 +89,7 @@ mod_eqtl_server <- function(id, app){
     # Observe additions / deletions of upstream source modules
     #==========================================
     observeEvent(app$modules, {
-      updateSelectInput(session, inputId="source_2", choices=c("", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
+      updateSelectInput(session, inputId="source_2", choices=c("off", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
     })
 
 
@@ -124,7 +98,7 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     observeEvent(input$source_2, {
       if(is.null(input$source_2) || input$source_2=="") {
-        updateSelectInput(session, inputId="source_2", choices=c("", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
+        updateSelectInput(session, inputId="source_2", choices=c("off", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
       }
       if(!is.null(app$modules[[input$source_2]]$data)) {
         source_cols <- names(app$modules[[input$source_2]]$data)
@@ -140,24 +114,16 @@ mod_eqtl_server <- function(id, app){
     observeEvent(data_mod$data, {
       req(data_mod$data)
 
-      # mean beta per quantification method
-      data_mod$data[, mean_beta := mean(BETA, na.rm=TRUE), by="QUANT_METHOD"]
-      data_mod$data[, sd_beta   := stats::sd(BETA, na.rm=TRUE),   by="QUANT_METHOD"]
-
-      # beta dnorm and ordered RSID factor (nicer plotting)
-      data_mod$data[, beta_dnorm := stats::dnorm(BETA, mean=mean_beta, sd=sd_beta)]
-      data.table::setorder(data_mod$data, beta_dnorm)
+      # order by beta for nicer plotting
+      data.table::setorder(data_mod$data, BETA)
       data_mod$data[, RSID_beta := factor(RSID, levels=unique(data_mod$data$RSID))]
 
       # Tissue - study factor
       data_mod$data[, STUDY_TISSUE := factor(paste(STUDY,"-",TISSUE))]
       data_mod$data[, STUDY_TISSUE_METHOD := factor(paste(STUDY,"-",TISSUE,"-",QUANT_METHOD))]
 
-      # mean expression
-      data_mod$data[, mean_tpm  := mean(TPM, na.rm=TRUE),  by="STUDY_TISSUE"]
-
       # transcripts per million dnorm and ordered RSID factor (nicer plotting)
-      data.table::setorder(data_mod$data, mean_tpm)
+      data.table::setorder(data_mod$data, TPM)
       data_mod$data[, TISSUE := factor(TISSUE, levels=unique(data_mod$data$TISSUE))]
 
       # Calculate PCA / clustering datatable
@@ -191,17 +157,18 @@ mod_eqtl_server <- function(id, app){
       if(input$view=="Tissue - variation") {
 
         p <- ggplot2::ggplot(data = data_mod$data,
-                             mapping = ggplot2::aes(x = RSID_beta, y = STUDY, fill=beta_dnorm)) +
+                             mapping = ggplot2::aes(x = RSID_beta, y = STUDY, fill=BETA)) + #beta_dnorm)) +
           ggplot2::geom_tile() +
-          viridis::scale_fill_viridis(option="inferno", direction=-1) +
+          # viridis::scale_fill_viridis(option="inferno", direction=-1) +
+          ggplot2::scale_fill_gradient2(low="red",mid="black",high="green", limits=c(-0.5,0.5), oob=scales::squish) +
           ggplot2::theme(axis.text.x = ggplot2::element_blank()) +
-          ggplot2::labs(x = "RSID", y = "Dataset (study)", fill="dnorm(\u03B2)") +
+          ggplot2::labs(x = "RSID", y = "Dataset (study)", fill="\u03B2") +
           facet_grid(rows = vars(TISSUE), cols = vars(QUANT_METHOD))
 
       } else if(input$view=="Tissue - expression") {
 
         p <- ggplot2::ggplot(data = data_mod$data,
-                             mapping = ggplot2::aes(x = TISSUE, y = STUDY, fill=mean_tpm)) +
+                             mapping = ggplot2::aes(x = TISSUE, y = STUDY, fill=TPM)) +
           ggplot2::geom_tile() +
           viridis::scale_fill_viridis(option="inferno", direction=1) +
           ggplot2::labs(x = "Tissue", y = "Study", fill="TPM")
@@ -250,10 +217,21 @@ mod_eqtl_server <- function(id, app){
       # require the inputs (i.e. not NULL)
       req(data_mod$data, input$datasets, input$beta_dir, input$dataset_combine_method, input$source_2, input$source_2_filter)
 
+      # if clumped, then only use clumped data; else take all variant forward
+      if(all(c("clump","index") %in% names(data_mod$data))) {
+
+        data_mod$data[, eqtl := ifelse(index==TRUE, TRUE, FALSE)]
+
+      } else {
+
+        data_mod$data[, eqtl := TRUE]
+
+      }
+
       # which eQTL dataset to use?
       if("All" %in% input$datasets) {
 
-        data_mod$data[, eqtl := TRUE]
+        data_mod$data[, eqtl := eqtl] # just continue
 
       } else {
 
@@ -346,20 +324,63 @@ mod_eqtl_server <- function(id, app){
         need(!is.null(data_mod$data), 'No data imported, click the import button')
       )
 
-      print("plotting")
-
       p <- ggplot2::ggplot(data = data_mod$data,
-                           mapping = ggplot2::aes(x = BP, y = nlog10P, color=STUDY_TISSUE, shape=QUANT_METHOD)) +
-        ggplot2::geom_point() +
+                           mapping = ggplot2::aes(x = BP, y = nlog10P, shape=QUANT_METHOD)) +
         annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05) +
         theme_classic() +
-        viridis::scale_color_viridis(option="viridis", discrete = TRUE) +
         lims(x = c(app$modules$gene$start - app$modules$gene$flanks_kb*1000, app$modules$gene$end + app$modules$gene$flanks_kb*1000),
              y = c(-2.5, max(8.0, max(data_mod$data$nlog10P)))) +
         labs(x     = paste0("Chromosome ", app$modules$gene$chr, " position"),
              y     = expression(paste("-log"[10], plain(P))),
-             color = "Study - Tissue",
              shape = "Quant. method")
+
+
+
+
+      # if we have computed the eQTL flag then plot
+      if("eqtl" %in% names(data_mod$data)) {
+
+        # add points and colours for tissues
+        p <- p +
+          geom_point(color="lightgray")
+
+        # draw large triangles, lines and labels if less than 50 to draw; otherwise small triangles
+        if(sum(data_mod$data$eqtl, na.rm=TRUE) < 50) {
+
+          p <- p +
+            geom_vline(data = data_mod$data[eqtl==TRUE, ], mapping=aes(xintercept=BP), linetype="dotted", color= "darkred") +
+            geom_point(data = data_mod$data[eqtl==TRUE, ], mapping=aes(x=BP, y=nlog10P), inherit.aes=FALSE, size=3, fill="red",color="red",shape=24) +
+            geom_label_repel(data = data_mod$data[eqtl==TRUE, ], mapping=aes(label=RSID, x=BP, y=nlog10P), max.overlaps=Inf, inherit.aes=FALSE)
+
+        } else {
+
+          p <- p +
+            geom_point(data = data_mod$data[eqtl==TRUE, ], mapping=aes(x=BP, y=nlog10P), inherit.aes=FALSE, size=1, fill="red",color="red",shape=24)
+
+        }
+
+      # if we only have clumped data but no eQTL flag yet, plot that
+      } else if(all(c("clump","index") %in% names(data_mod$data))) {
+
+        # add points and colours for clumps
+        p <- p +
+          geom_point(color="lightgray") +
+          geom_point(data = data_mod$data[!is.na(data_mod$data$clump), ],            mapping = aes(x=BP, y=nlog10P, color=clump, fill=clump),inherit.aes=FALSE, shape=23) +
+          geom_vline(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(xintercept=BP), linetype="dotted", color="darkred") +
+          geom_point(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(x=BP, y=nlog10P),inherit.aes=FALSE, size=3, fill="red", color="red", shape=24) +
+          geom_label(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(label=clump, x=BP, y=-0.5), inherit.aes=FALSE) +
+          geom_label_repel(data = data_mod$data[which(data_mod$data$index==TRUE), ], mapping = aes(label=RSID,  x=BP, y=nlog10P), inherit.aes=FALSE) +
+          labs(color = "Clump", fill = "Clump")
+
+      # base case - not eQTL or clump flag present
+      } else {
+
+        p <- p +
+          ggplot2::geom_point(aes(color=STUDY_TISSUE)) +
+          viridis::scale_color_viridis(option="viridis", discrete = TRUE) +
+          labs(color = "Study - Tissue")
+
+      }
 
       # if gene data then add
       if(!is.null(data_mod$data2)) {
@@ -377,29 +398,6 @@ mod_eqtl_server <- function(id, app){
           geom_text_repel(data = data_mod$data2[data_mod$data2$STRAND=="+",  ],
                           mapping = aes(label = GENE_NAME, x=(BP_END-BP_START)/2 + BP_START, y =-1.5),
                           inherit.aes=FALSE, min.segment.length = 0.25)
-      }
-
-
-      # if we have computed the eQTL flag then plot
-      if("eqtl" %in% names(data_mod$data)) {
-
-        # draw large triangles, lines and labels if less than 50 to draw; otherwise small triangles
-        if(sum(data_mod$data$eqtl, na.rm=TRUE) < 50) {
-
-          p <- p +
-            geom_vline(data = data_mod$data[eqtl==TRUE, ], mapping=aes(xintercept=BP), linetype="dotted", color= "darkred") +
-            geom_point(data = data_mod$data[eqtl==TRUE, ], mapping=aes(x=BP, y=nlog10P), inherit.aes=FALSE, size=3, fill="red",color="red",shape=24) +
-            geom_label_repel(data = data_mod$data[eqtl==TRUE, ], mapping=aes(label=RSID, x=BP, y=nlog10P), max.overlaps=Inf, inherit.aes=FALSE) +
-            labs(color = "Upstream hit", fill = "Upstream hit")
-
-        } else {
-
-          p <- p +
-            geom_point(data = data_mod$data[eqtl==TRUE, ], mapping=aes(x=BP, y=nlog10P), inherit.aes=FALSE, size=1, fill="red",color="red",shape=24) +
-            labs(color = "Upstream hit", fill = "Upstream hit")
-
-        }
-
       }
 
       return(p)
@@ -423,6 +421,64 @@ mod_eqtl_server <- function(id, app){
       error = function(e) {
         return(NULL)
       })
+    })
+
+
+
+
+    #==========================================
+    # Upstream data UI
+    #==========================================
+    output$upstream_controls <- renderUI({
+
+      if(input$source_2 != "off") {
+
+        shinyjs::enable("source_2_filter")
+
+        controls <- fluidRow(
+          column(6,
+                 selectizeInput(inputId  = ns("datasets"),
+                                label    = "Datasets",
+                                choices  = c("All"),
+                                selected = "All",
+                                multiple = TRUE),
+                 prettyRadioButtons(inputId  = ns("beta_dir"),
+                                    label    = "BETA dir",
+                                    choices  = c("Any","Concordant","Disconcordant"),
+                                    selected = "Any",
+                                    inline   = FALSE)
+                 ),
+          column(6,
+                 selectInput(inputId  = ns("dataset_combine_method"),
+                             label    = "Combine by",
+                             choices  = c("Don't combine", "Maximum abs(BETA)","Lowest P-value","Largest sample size"),
+                             selected = "Largest sample size"),
+                 actionButton(inputId = ns("apply"),
+                              label   = "Apply"),
+                 actionButton(inputId = ns("reset"),
+                              width   = "40px",
+                              label   = "",
+                              icon    = icon("rotate-left"))
+                 )
+          )
+
+        } else {
+
+          shinyjs::disable("source_2_filter")
+
+          # remove eqtl flag if present
+          if("eqtl" %in% names(data_mod$data)) {
+            data_mod$data[, eqtl := NULL]
+            tmp <- data.table::copy(data_mod$data)
+            data_mod$data <- NULL
+            data_mod$data <- tmp
+          }
+
+          controls <- fluidRow()
+
+        }
+
+      return(controls)
     })
 
 

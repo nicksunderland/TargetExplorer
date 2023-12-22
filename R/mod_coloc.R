@@ -13,10 +13,13 @@ mod_coloc_ui <- function(id){
   div(
     id = id,
     sidebarLayout(position = "right",
-                  sidebarPanel(p(strong(paste0("Controls [",id,"]"))),
-                               width = 3,
-                               hr(),
-                               mod_data_ui(id=ns("data")),
+                  sidebarPanel(width = 3,
+                               fluidRow(
+                                 column(10,
+                                        p(strong(paste0("Controls [",id,"]")))),
+                                 column(2,
+                                        actionButton(inputId=ns("remove_module"), width = "40px", label = "", icon = icon("trash-can")))
+                               ),
                                hr(),
                                fluidRow(
                                  column(6,
@@ -64,10 +67,32 @@ mod_coloc_ui <- function(id){
                                         )
                                ),
                                fluidRow(
+                                 column(6, selectInput(inputId  = ns("ld_reference"),
+                                                       label    = "LD reference",
+                                                       choices  = c("EUR_1000G"))),
+                                 column(6, prettyRadioButtons(inputId  = ns("method"),
+                                                              label    = "Method",
+                                                              choices  = c("Single causal","SuSiE"),
+                                                              selected = "Single causal"))
+                               ),
+                               fluidRow(
                                  column(6, actionButton(inputId = ns("run_finemap"),
                                                         label   = "Finemap")),
                                  column(6, actionButton(inputId = ns("run_coloc"),
-                                                        label   = "Coloc")),
+                                                        label   = "Coloc"))
+                               ),
+                               hr(),
+                               fluidRow(
+                                 column(6,
+                                        sliderTextInput(inputId  = ns("credible_set_p"),
+                                                        label    = "Credible set %",
+                                                        choices  = c(0.50,0.60,0.70,0.80,0.90,0.95,0.99,1.0),
+                                                        selected = 0.95,
+                                                        grid     = TRUE)),
+                                 column(6,
+                                        selectInput(inputId = ns("downstream_dataset"),
+                                                    label   = "Downstream dataset",
+                                                    choices = c("Dataset 1", "Dataset 2")))
                                )
                   ), # sidebar panel end
                   mainPanel(width = 9,
@@ -75,10 +100,7 @@ mod_coloc_ui <- function(id){
                             p(strong("Colocalisation:")),
                             fluidRow(
                               column(6,
-                                     p("Trait 1:"),
-                                     plotOutput(outputId = ns("locus_plot1"), height = "250px"),
-                                     p("Trait 2:"),
-                                     plotOutput(outputId = ns("locus_plot2"), height = "250px")
+                                     plotOutput(outputId = ns("locus_plot"), height = "500px"),
                               ),
                               column(6,
                                      plotOutput(outputId = ns("prob_plot1"), height = "250px"),
@@ -119,23 +141,28 @@ mod_coloc_server <- function(id, app){
       # check data
       if(is.null(app$modules[[input$source_1]]$data) || is.null(app$modules[[input$source_2]]$data)) return(NULL)
 
-      # library(coloc)
-      # data(coloc_test_data)
-      # attach(coloc_test_data)
 
-      # remove duplicates in source 1
-      d1 <- app$modules[[input$source_1]]$data |>
-        dplyr::group_by(RSID) |>
-        dplyr::slice_min(P)
 
-      #
-      # [order(P), "RSID"])
-      # if(sum(dup_idx, na.rm=TRUE) > 0) {
-      #   showNotification("Duplicate RSIDs found in source 1, taking the lowest P-value variant", type="warning")
-      # } else {
-      #   dup_idx <- rep(FALSE, length(dup_idx))
-      # }
 
+
+
+      # HARMONISE!!!
+
+
+
+
+
+
+      # source 1
+      d1 <- app$modules[[input$source_1]]$data
+
+      # test for and deal with duplicate IDs
+      if(sum(duplicated(d1$RSID), na.rm=TRUE) > 0) {
+        d1 <- d1[d1[, .I[which.min(P)], by=RSID]$V1]
+        showNotification("Duplicate RSIDs found in source 1, taking the lowest P-value variant", type="warning")
+      }
+
+      # create the coloc object
       D1 <- list(
         snp      = d1$RSID,
         position = d1$BP,
@@ -144,23 +171,30 @@ mod_coloc_server <- function(id, app){
         varbeta  = d1$SE ^ 2,
         N        = d1$N,
         type     = input$source_1_type
-        # sdY      = NULL,
-        # LD       = NULL
       )
 
-      coloc::check_dataset(D1)
+      # check the dataset
+      tryCatch({
+        coloc::check_dataset(d=D1, suffix="source 1")
+      },
+      error=function(e) {
+        showNotification(paste0("Source 1 dataset check failed - ", e), type="error", duration=10)
+        return(NULL)
+      },
+      warning=function(w) {
+        showNotification(paste0("Source 1 dataset check warning - ", w), type="warning", duration=10)
+      })
 
-      # remove duplicates in source 2
-      d2 <- app$modules[[input$source_2]]$data |>
-        dplyr::group_by(RSID) |>
-        dplyr::slice_min(P)
+      # source 2
+      d2 <- app$modules[[input$source_2]]$data
 
-      # dup_idx2 <- duplicated(app$modules[[input$source_2]]$data[order(P), "RSID"])
-      # if(sum(dup_idx2, na.rm=TRUE) > 0) {
-      #   showNotification("Duplicate RSIDs found in source 2, taking the lowest P-value variant", type="warning")
-      # } else {
-      #   dup_idx2 <- rep(FALSE, length(dup_idx2))
-      # }
+      # test for and deal with duplicate IDs
+      if(sum(duplicated(d2$RSID), na.rm=TRUE) > 0) {
+        d2 <- d2[d2[, .I[which.min(P)], by=RSID]$V1]
+        showNotification("Duplicate RSIDs found in source 2, taking the lowest P-value variant", type="warning")
+      }
+
+      # create the coloc object
       D2 <- list(
         snp      = d2$RSID,
         position = d2$BP,
@@ -169,17 +203,56 @@ mod_coloc_server <- function(id, app){
         varbeta  = d2$SE ^ 2,
         N        = d2$N,
         type     = input$source_2_type
-        # LD       = NULL
-        # sdY      = NULL,
       )
-      coloc::check_dataset(D2)
 
+      # check the dataset
+      tryCatch({
+        coloc::check_dataset(d=D2, suffix="source 2")
+      },
+      error=function(e) {
+        showNotification(paste0("Source 2 dataset check failed - ", e), type="error", duration=10)
+        return(NULL)
+      },
+      warning=function(w) {
+        showNotification(paste0("Source 2 dataset check warning - ", w), type="warning", duration=10)
+      })
+
+      # run the colocalisation function and put the result in data2
       data_mod$data2 <- coloc::coloc.abf(dataset1=D1, dataset2=D2)
 
-      data_mod$data1 <- dplyr::left_join(app$modules[[input$source_1]]$data,
-                                         data_mod$data2$results[, c("snp","SNP.PP.H4")],
-                                         by=c("RSID"="snp")) |>
-        dplyr::mutate("SNP.PP.H4"= ifelse(is.na(`SNP.PP.H4`),0,`SNP.PP.H4`))
+      # calculate the cumulative H4.posterior probability
+      data_mod$data2$results <- data.table::as.data.table(data_mod$data2$results)
+      data_mod$data2$results[order(SNP.PP.H4, decreasing=TRUE), cumsum_pp_h4 := cumsum(SNP.PP.H4)]
+
+      # depending on the decision parameters add a coloc flag to which ever dataset is going to be the downstream
+      if(input$downstream_dataset == "Dataset 1") {
+
+        dat <- data.table::copy(app$modules[[input$source_1]]$data)
+
+      # "Dataset 2"
+      } else {
+
+        dat <- data.table::copy(app$modules[[input$source_2]]$data)
+
+      }
+
+      # join cumsum posterior probability
+      dat[data_mod$data2$results, cumsum_pp_h4 := i.cumsum_pp_h4, on=c("RSID"="snp")]
+
+      # determine credible set - flag as coloc (i.e. when is the cumulative probability > 95%)
+      dat[order(cumsum_pp_h4), coloc := ifelse(.I <= which(cumsum_pp_h4>=input$credible_set_p)[1], TRUE, FALSE)]
+
+      # assign to data module `data`
+      data_mod$data <- dat
+    })
+
+    observeEvent(input$credible_set_p, {
+
+      if(is.null(data_mod$data)) return(NULL)
+      req("cumsum_pp_h4" %in% names(data_mod$data))
+
+      # determine credible set - flag as coloc
+      data_mod$data[, coloc := ifelse(cumsum_pp_h4 > input$credible_set_p, TRUE, FALSE)]
 
     })
 
@@ -188,8 +261,8 @@ mod_coloc_server <- function(id, app){
     # Observe additions / deletions of modules
     #==========================================
     observeEvent(app$modules, {
-      updateSelectInput(session, inputId="source_1", choices=names(app$modules)[names(app$modules)!="gene"])
-      updateSelectInput(session, inputId="source_2", choices=names(app$modules)[names(app$modules)!="gene"])
+      updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules)  %in% c("gene",id)])
+      updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules)  %in% c("gene",id)])
     })
 
 
@@ -198,10 +271,22 @@ mod_coloc_server <- function(id, app){
     #==========================================
     observeEvent(list(input$source_1,input$source_2), {
       if(is.null(input$source_1) || input$source_1=="") {
-        updateSelectInput(session, inputId="source_1", choices=names(app$modules)[names(app$modules)!="gene"])
+        updateSelectInput(session, inputId="source_1", choices=names(app$modules)[!names(app$modules)  %in% c("gene",id)])
       }
       if(is.null(input$source_2) || input$source_2=="") {
-        updateSelectInput(session, inputId="source_2", choices=names(app$modules)[names(app$modules)!="gene"])
+        updateSelectInput(session, inputId="source_2", choices=names(app$modules)[!names(app$modules)  %in% c("gene",id)])
+      }
+    })
+
+
+    #==========================================
+    # Observe method input (SuSiE / single causal variant assumption)
+    #==========================================
+    observeEvent(input$method, {
+      if(input$method == "SuSiE") {
+        shinyjs::enable("ld_reference")
+      } else if(input$method == "Single causal") {
+        shinyjs::disable("ld_reference")
       }
     })
 
@@ -218,119 +303,143 @@ mod_coloc_server <- function(id, app){
 
 
     #==========================================
-    # Trait 1 locus plot
+    # Locus plot
     #==========================================
-    output$locus_plot1 <- renderPlot({
+    output$locus_plot <- renderPlot({
+
+      print("calling locus plot")
 
       # check data
       validate(
-        need(!is.null(app$modules[[input$source_1]]$data),
-             paste0('No data imported for [', input$source_1, ']'))
+        need(!is.null(app$modules[[input$source_1]]$data) | !is.null(app$modules[[input$source_2]]$data), 'No data imported for either dataset')
       )
 
       # colours
       color_list = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
 
-      # create the locus plot
-      p <- ggplot(data    = app$modules[[input$source_1]]$data,
-                  mapping = aes(x=BP, y=nlog10P))
-
-      # color for eQTL tissues
-      if("TISSUE" %in% names(app$modules[[input$source_1]]$data)) {
-
-        p <- p + geom_point(aes(color=TISSUE))
-
-      }
-
-      if(!is.null(data_mod$data)) {
-        if("SNP.PP.H4" %in% names(data_mod$data)) {
-
-          p <- ggplot(data = data_mod$data,
-                      mapping = aes(x=BP, y=nlog10P, color=`SNP.PP.H4`))
-
-        }
-      }
-
-
-
-      # triangles for index data
-      if("index" %in% names(app$modules[[input$source_1]]$data)) {
-
-        p <- p + geom_point(color="lightgray") +
-            geom_point(data = app$modules[[input$source_1]]$data[app$modules[[input$source_1]]$data$index %in% TRUE, ],
-                       mapping = aes(x=BP, y=nlog10P,
-                                     color=factor(index, levels=c(TRUE), labels=c("Index SNPs")),
-                                     fill =factor(index, levels=c(TRUE), labels=c("Index SNPs"))), size=3, shape=24) +
-            scale_fill_manual(values=c("red")) +
-            scale_color_manual(values=c("red")) +
-            guides(color = guide_legend(title = NULL),
-                   fill  = guide_legend(title = NULL))
-      } else {
-
-        p <- p + geom_point(color="lightgray")
-
-      }
-
-      p <- p +
-        annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05) +
-        theme_classic() +
-        lims(x = c(app$modules$gene$start - app$modules$gene$flanks_kb*1000, app$modules$gene$end + app$modules$gene$flanks_kb*1000)) +
-        labs(x        = paste0("Chromosome ", app$modules$gene$chr, " position"),
-             y        = expression(paste("-log"[10], plain(P)))) +
-        theme(legend.position="top")
-
-      return(p)
-    })
-
-
-    #==========================================
-    # Trait 2 locus plot
-    #==========================================
-    output$locus_plot2 <- renderPlot({
-
-      # check data
-      validate(
-        need(!is.null(app$modules[[input$source_2]]$data), paste0('No data imported for [', input$source_2, ']'))
-      )
-
-      # colours
-      color_list = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
-
-      # create the locus plot
-      p <- ggplot(data    = app$modules[[input$source_2]]$data,
-                  mapping = aes(x=BP, y=nlog10P))
-
-
-      # color for eQTL tissues
-      if("TISSUE" %in% names(app$modules[[input$source_2]]$data)) {
-
-        p <- p + geom_point(aes(color=TISSUE))
-
-        # triangles for index data
-      } else if("index" %in% names(app$modules[[input$source_2]]$data)) {
-
-        p <- p + geom_point(color="lightgray") +
-          geom_point(data = app$modules[[input$source_2]]$data[app$modules[[input$source_2]]$data$index %in% TRUE, ],
-                     mapping = aes(x=BP, y=nlog10P,
-                                   color=factor(index, levels=c(TRUE), labels=c("Index SNPs")),
-                                   fill =factor(index, levels=c(TRUE), labels=c("Index SNPs"))), size=3, shape=24) +
-          scale_fill_manual(values=c("red")) +
-          scale_color_manual(values=c("red")) +
-          guides(color = guide_legend(title = NULL),
-                 fill  = guide_legend(title = NULL))
-      } else {
-
-        p <- p + geom_point(color="lightgray")
-
-      }
-
-      p <- p +
-        annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05) +
+      # base plot
+      p <- ggplot() +
         theme_classic() +
         lims(x = c(app$modules$gene$start - app$modules$gene$flanks_kb*1000, app$modules$gene$end + app$modules$gene$flanks_kb*1000)) +
         labs(x = paste0("Chromosome ", app$modules$gene$chr, " position"),
              y = expression(paste("-log"[10], plain(P)))) +
         theme(legend.position="top")
+
+      # y axis max and min
+      y_max <- c(NA_real_, NA_real_)
+
+      # plot source 1 data positive
+      if(!is.null(app$modules[[input$source_1]]$data)) {
+
+        y_max[[1]] <- max(app$modules[[input$source_1]]$data$nlog10P, na.rm=TRUE)
+
+        p <- p +
+          annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05)
+
+        # add downstream label if UI indicates
+        if(input$downstream_dataset=="Dataset 1") {
+          p <- p +
+            annotate(geom = "text", x=app$modules$gene$end+(app$modules$gene$flanks_kb*1000)-1e4, y=ceiling(y_max[[1]]), label="downstream", color="darkred", alpha=0.5)
+        }
+
+        # see if there are variables to colour the points by
+        if(all(c("QUANT_METHOD","STUDY_TISSUE") %in% names(app$modules[[input$source_1]]$data))) {
+
+          p <- p +
+            geom_point(data    = app$modules[[input$source_1]]$data,
+                       mapping = aes(x=BP, y=nlog10P, color=STUDY_TISSUE, shape=QUANT_METHOD)) +
+            labs(color="Tissue", shape="Quant. method")
+
+        } else {
+
+          p <- p +
+            geom_point(data    = app$modules[[input$source_1]]$data,
+                       mapping = aes(x=BP, y=nlog10P),
+                       color   = "lightgray")
+
+        }
+
+      }
+
+      # plot source 2 data negative
+      if(!is.null(app$modules[[input$source_2]]$data)) {
+
+        y_max[[2]] <- max(app$modules[[input$source_2]]$data$nlog10P, na.rm=TRUE)
+
+        p <- p +
+          annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=-Inf, ymax=0, fill="blue", alpha = 0.05)
+
+        # add downstream label if UI indicates
+        if(input$downstream_dataset=="Dataset 2") {
+          p <- p +
+            annotate(geom = "text", x=app$modules$gene$end+(app$modules$gene$flanks_kb*1000)-1e4, y=-ceiling(y_max[[2]]), label="downstream", color="darkred", alpha=0.5)
+        }
+
+        # see if there are variables to colour the points by
+        if(all(c("QUANT_METHOD","STUDY_TISSUE") %in% names(app$modules[[input$source_2]]$data))) {
+
+          p <- p +
+            geom_point(data    = app$modules[[input$source_2]]$data,
+                       mapping = aes(x=BP, y=-nlog10P, color=STUDY_TISSUE, shape=QUANT_METHOD)) +
+            labs(color="Tissue", shape="Quant. method")
+
+        } else {
+
+          p <- p +
+            geom_point(data    = app$modules[[input$source_2]]$data,
+                       mapping = aes(x=BP, y=-nlog10P),
+                       color   = "darkgray")
+
+        }
+
+      }
+
+      # if two sets of data draw the x-axis at y=0
+      if(!is.null(app$modules[[input$source_1]]$data) && !is.null(app$modules[[input$source_2]]$data)) {
+        p <- p + geom_hline(yintercept = 0)
+      }
+
+      # see if there is colocalised data to plot
+      if(!is.null(data_mod$data) && "cumsum_pp_h4" %in% names(data_mod$data)) {
+
+        # recalculate the credible set
+        data_mod$data[order(cumsum_pp_h4), coloc := ifelse(.I <= which(cumsum_pp_h4>input$credible_set_p)[1], TRUE, FALSE)]
+
+        # if source 1 data - add the coloc points
+        if(!is.null(app$modules[[input$source_1]]$data)) {
+
+          p <- p +
+            geom_point(data    = app$modules[[input$source_1]]$data[RSID %in% data_mod$data[coloc==TRUE, RSID], ],
+                       mapping = aes(x=BP, y=nlog10P),
+                       color   = "red", fill = "red", shape=24, size=3) +
+            geom_label_repel(data    = app$modules[[input$source_1]]$data[RSID %in% data_mod$data[coloc==TRUE, RSID], ],
+                             mapping = aes(label=RSID,  x=BP, y=nlog10P),
+                             max.overlaps = Inf)
+
+        }
+
+        # if source 2 data - add the coloc points
+        if(!is.null(app$modules[[input$source_2]]$data)) {
+
+          p <- p +
+            geom_point(data    = app$modules[[input$source_2]]$data[RSID %in% data_mod$data[coloc==TRUE, RSID], ],
+                       mapping = aes(x=BP, y=-nlog10P),
+                       color   = "red", fill = "red", shape=24, size=3) +
+            geom_label_repel(data    = app$modules[[input$source_2]]$data[RSID %in% data_mod$data[coloc==TRUE, RSID], ],
+                             mapping = aes(label=RSID,  x=BP, y=-nlog10P),
+                             max.overlaps = Inf)
+
+        }
+
+      }
+
+      # correct P values on the Y axis
+      p <- p +
+        scale_y_continuous(breaks =     seq(ifelse(is.na(y_max[[2]]), 0, -ceiling(y_max[[2]])),
+                                            ifelse(is.na(y_max[[1]]), 0,  ceiling(y_max[[1]])), 1),
+                           labels = abs(seq(ifelse(is.na(y_max[[2]]), 0, -ceiling(y_max[[2]])),
+                                            ifelse(is.na(y_max[[1]]), 0,  ceiling(y_max[[1]])), 1)))
+
 
       return(p)
     })

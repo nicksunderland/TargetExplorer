@@ -254,36 +254,37 @@ mod_mr_server <- function(id, app){
         shiny::incProgress(1/n, detail = "Starting")
 
         # possible instrument selection steps
-        iv_selection <- c("index","eqtl","coloc")
+        # in order of how they should be used e.g. if clump and eqtl columns, then use eqtl over clump
+        iv_selection <- c("eqtl","coloc","index")
 
         # get type of data / filter column
         cols_1 <- names(app$modules[[input$source_1]]$data)
         cols_2 <- names(app$modules[[input$source_2]]$data)
-        filter_col_1 <- cols_1[ which(cols_1 %in% iv_selection) ]
-        filter_col_2 <- cols_2[ which(cols_2 %in% iv_selection) ]
+        filter_col_1 <- iv_selection[ which(iv_selection %in% cols_1) ]
+        filter_col_2 <- iv_selection[ which(iv_selection %in% cols_2) ]
 
         # apply the filter column (if present) to get the variants
         if(length(filter_col_1)==0) {
           variants_source_1 <- app$modules[[input$source_1]]$data[["RSID"]]
         } else {
-          variants_source_1 <- app$modules[[input$source_1]]$data[get(filter_col_1)==TRUE, RSID]
+          variants_source_1 <- app$modules[[input$source_1]]$data[get(filter_col_1[[1]])==TRUE, RSID]
         }
 
         # apply the filter column (if present) to get the variants
         if(length(filter_col_2)==0) {
           variants_source_2 <- app$modules[[input$source_2]]$data[["RSID"]]
         } else {
-          variants_source_2 <- app$modules[[input$source_2]]$data[get(filter_col_2)==TRUE, RSID]
+          variants_source_2 <- app$modules[[input$source_2]]$data[get(filter_col_2[[1]])==TRUE, RSID]
         }
 
         # filter the source 1 variants by those in the "filter by/source_1_join" option
         if(input$source_1_join != "-") {
           cols_1_join <- names(app$modules[[input$source_1_join]]$data)
-          filter_col_1_join <- cols_1_join[ which(cols_1_join %in% iv_selection) ]
+          filter_col_1_join <- iv_selection[ which(iv_selection %in% cols_1_join) ]
           if(length(filter_col_1_join)==0) {
             variants_source_1_join <- app$modules[[input$source_1_join]]$data[["RSID"]]
           } else {
-            variants_source_1_join <- app$modules[[input$source_1_join]]$data[get(filter_col_1_join)==TRUE, RSID]
+            variants_source_1_join <- app$modules[[input$source_1_join]]$data[get(filter_col_1_join[[1]])==TRUE, RSID]
           }
           variants_source_1 <- variants_source_1[variants_source_1 %in% variants_source_1_join]
         }
@@ -291,11 +292,11 @@ mod_mr_server <- function(id, app){
         # filter the source 2 variants by those in the "filter by/source_2_join" option
         if(input$source_2_join != "-") {
           cols_2_join <- names(app$modules[[input$source_2_join]]$data)
-          filter_col_2_join <- cols_2_join[ which(cols_2_join %in% iv_selection) ]
+          filter_col_2_join <- iv_selection[ which(iv_selection %in% cols_2_join) ]
           if(length(filter_col_2_join)==0) {
             variants_source_2_join <- app$modules[[input$source_2_join]]$data[["RSID"]]
           } else {
-            variants_source_2_join <- app$modules[[input$source_2_join]]$data[get(filter_col_2_join)==TRUE, RSID]
+            variants_source_2_join <- app$modules[[input$source_2_join]]$data[get(filter_col_2_join[[1]])==TRUE, RSID]
           }
           variants_source_2 <- variants_source_2[variants_source_2 %in% variants_source_2_join]
         }

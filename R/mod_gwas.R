@@ -107,17 +107,7 @@ mod_gwas_server <- function(id, app){
           geom_label_repel(data = data_mod$data[which(data_mod$data$index==TRUE), ], mapping = aes(label=RSID,  x=BP, y=nlog10P)) +
           labs(color = "Clump", fill = "Clump")
 
-      # scenario when 'all' checkbox is clicked - no clump column, but a TRUE index column
-      } else if("index" %in% colnames(data_mod$data)) {
-        p <- p +
-          geom_point(data = data_mod$data,
-                     mapping = aes(x=BP, y=nlog10P,
-                                   color=factor(index, levels=c(TRUE), labels=c("Use all")),
-                                   fill =factor(index, levels=c(TRUE), labels=c("Use all"))), size=1, shape=24) +
-          scale_fill_manual(values=c("red")) +
-          scale_color_manual(values=c("red")) +
-          guides(color = guide_legend(title = NULL),
-                 fill  = guide_legend(title = NULL))
+
       }
 
       return(p)
@@ -140,77 +130,6 @@ mod_gwas_server <- function(id, app){
       error = function(e) {
         return(NULL)
       })
-    })
-
-
-    #==========================================
-    # reset clumping
-    #==========================================
-    observeEvent(input$reset, {
-
-      if(all(c("clump","index") %in% names(data_mod$data))) {
-        data_mod$data[, c("clump","index") := NULL]
-        tmp <- data.table::copy(data_mod$data)
-        data_mod$data <- NULL
-        data_mod$data <- tmp
-      }
-
-    })
-
-
-    #==========================================
-    # Clump button
-    #==========================================
-    observeEvent(input$clump, {
-
-      # check data
-      if(is.null(data_mod$data)) return(NULL)
-
-      # clean up previous runs if data present
-      if("clump" %in% names(data_mod$data)) {
-        data_mod$data$clump <- NULL
-      }
-      if("index" %in% names(data_mod$data)) {
-        data_mod$data$index <- NULL
-      }
-
-      # get the reference file
-      plink_ref <- make_1000G_ref_subset(chrom = app$modules$gene$chr,
-                                         from  = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-                                         to    = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
-
-
-      # reset if previously run (issues with factors being reset)
-      if("clump" %in% names(data_mod$data)) {
-
-        data_mod$data$clump <- NULL
-        data_mod$data$index <- NULL
-
-      }
-
-      shiny::withProgress(message = 'Clumping data', value = 0, {
-
-        shiny::incProgress(1/4, detail = paste("Processing", input$`filter-dataset`, "..."))
-
-        # run clumping
-        data_mod$data <- genepi.utils::clump(gwas      = data_mod$data,
-                                             p1        = input$clump_p1,
-                                             p2        = input$clump_p2,
-                                             r2        = input$clump_r2,
-                                             kb        = input$clump_kb,
-                                             plink2    = get_plink2_exe(),
-                                             plink_ref = plink_ref) #|> as.data.frame()
-
-        if(any(data_mod$data$index)) {
-          shiny::incProgress(3/4, detail = paste("Complete"))
-        } else {
-          shiny::incProgress(2/4, detail = paste("Failed"))
-          Sys.sleep(1)
-          shiny::incProgress(1/4, detail = paste("Failed"))
-        }
-
-      })
-
     })
 
 

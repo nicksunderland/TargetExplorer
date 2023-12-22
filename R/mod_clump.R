@@ -119,12 +119,12 @@ mod_clump_server <- function(id, gene_module, data_module){
       # check data
       if(is.null(data_module$data)) return(NULL)
 
-      # clean up previous runs if data present
-      if("clump" %in% names(data_module$data)) {
+      # reset if previously run (issues with factors being reset)
+      if(any(c("clump","index") %in% names(data_module$data))) {
+
         data_module$data$clump <- NULL
-      }
-      if("index" %in% names(data_module$data)) {
         data_module$data$index <- NULL
+
       }
 
       # get the reference file
@@ -132,14 +132,6 @@ mod_clump_server <- function(id, gene_module, data_module){
                                          from  = gene_module$start - gene_module$flanks_kb*1000,
                                          to    = gene_module$end + gene_module$flanks_kb*1000)
 
-
-      # reset if previously run (issues with factors being reset)
-      if("clump" %in% names(data_module$data)) {
-
-        data_module$data$clump <- NULL
-        data_module$data$index <- NULL
-
-      }
 
       shiny::withProgress(message = 'Clumping data', value = 0, {
 
@@ -154,12 +146,12 @@ mod_clump_server <- function(id, gene_module, data_module){
                                                 plink2    = get_plink2_exe(),
                                                 plink_ref = plink_ref) #|> as.data.frame()
 
-        if(any(data_module$data$index)) {
-          shiny::incProgress(3/4, detail = paste("Complete"))
+        # warn if no clumps found
+        if(all(is.na(data_module$data$clump))) {
+          shiny::incProgress(3/4, detail = paste("Failed"))
+          showNotification("Clumping failed: \nno clumps were found with the provided parameters, or plink failed", type="error")
         } else {
-          shiny::incProgress(2/4, detail = paste("Failed"))
-          Sys.sleep(1)
-          shiny::incProgress(1/4, detail = paste("Failed"))
+          shiny::incProgress(3/4, detail = paste("Complete"))
         }
 
       })
