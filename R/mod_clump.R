@@ -40,6 +40,7 @@ mod_clump_server <- function(id, gene_module, data_module){
     # R CMD checks
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
 
+
     #==========================================
     # Data, clump, and remove (sub)module servers for the GWAS module
     #==========================================
@@ -98,8 +99,6 @@ mod_clump_server <- function(id, gene_module, data_module){
 
       return(ui_fluid_row)
     })
-
-
 
 
     #==========================================
