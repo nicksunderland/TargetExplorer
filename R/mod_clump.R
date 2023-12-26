@@ -12,15 +12,16 @@ mod_clump_ui <- function(id){
   cli::cli_alert_info(paste0("initialising mod_clump_ui(ns=",ns("foo"),")"))
   tagList(
     fluidRow(
-      column(6, selectInput(inputId  = ns("reference"),
-                            label    = "Clumping",
-                            choices  = c("off", "EUR_1000G"))),
-      column(4, actionButton(inputId = ns("clump"),
-                             label   = "Clump data")),
-      column(1, actionButton(inputId = ns("reset"),
-                             width   = "40px",
-                             label   = "",
-                             icon    = icon("rotate-left"))),
+      column(6,
+             mod_reference_ui(id=ns("reference"))),
+      column(4,
+             actionButton(inputId = ns("clump"),
+                          label   = "Clump data")),
+      column(1,
+             actionButton(inputId = ns("reset"),
+                          width   = "40px",
+                          label   = "",
+                          icon    = icon("rotate-left"))),
       tags$style(type='text/css', paste0("#",ns("clump")," { width:100%; margin-top: 25px;}")),
       tags$style(type='text/css', paste0("#",ns("reset")," { width:100%; margin-top: 25px;}")),
     ),
@@ -39,13 +40,18 @@ mod_clump_server <- function(id, gene_module, data_module){
     # R CMD checks
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
 
+    #==========================================
+    # Data, clump, and remove (sub)module servers for the GWAS module
+    #==========================================
+    reference_mod <- mod_reference_server(id="reference", label="Clumping", gene_module=app$modules$gene)
+
 
     #==========================================
     # reference selector / controls
     #==========================================
     output$clump_params <- renderUI({
 
-      if(input$reference != "off") {
+      if(!is.null(reference_mod$ref_path)) {
 
         shinyjs::enable("clump")
         shinyjs::enable("reset")
@@ -128,9 +134,10 @@ mod_clump_server <- function(id, gene_module, data_module){
       }
 
       # get the reference file
-      plink_ref <- make_1000G_ref_subset(chrom = gene_module$chr,
-                                         from  = gene_module$start - gene_module$flanks_kb*1000,
-                                         to    = gene_module$end + gene_module$flanks_kb*1000)
+      plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
+                                   chrom    = gene_module$chr,
+                                   from     = gene_module$start - gene_module$flanks_kb*1000,
+                                   to       = gene_module$end + gene_module$flanks_kb*1000)
 
 
       shiny::withProgress(message = 'Clumping data', value = 0, {

@@ -80,9 +80,7 @@ mod_coloc_ui <- function(id){
                                ),
                                fluidRow(
                                  column(6,
-                                        selectInput(inputId  = ns("ld_reference"),
-                                                    label    = "LD reference",
-                                                    choices  = c("EUR_1000G")),
+                                        mod_reference_ui(id=ns("reference")),
                                         actionButton(inputId = ns("run"),
                                                      label   = "Run")),
                                  column(6,
@@ -146,10 +144,11 @@ mod_coloc_server <- function(id, app){
     TISSUE <- index <- NULL
 
     #==========================================
-    # Data module server for the Coloc module
+    # Data, remove, and reference module servers for the Coloc module
     #==========================================
-    data_mod   <- mod_data_server(id="data", gene_module=app$modules$gene)
-    remove_mod <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
+    data_mod      <- mod_data_server(id="data", gene_module=app$modules$gene)
+    remove_mod    <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
+    reference_mod <- mod_reference_server(id="reference", label="LD reference", gene_module=app$modules$gene)
 
 
     #==========================================
@@ -181,9 +180,10 @@ mod_coloc_server <- function(id, app){
         } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 1" && !is.null(app$modules[[input$source_1]]$data)) {
 
           # get the reference file
-          plink_ref <- make_1000G_ref_subset(chrom = app$modules$gene$chr,
-                                             from  = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-                                             to    = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
+          plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
+                                       chrom    = app$modules$gene$chr,
+                                       from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                       to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
 
           # create the LD matrix for the region variants
           dat_ld_obj <- genepi.utils::ld_matrix(variants     = app$modules[[input$source_1]]$data,
@@ -231,9 +231,10 @@ mod_coloc_server <- function(id, app){
         } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 2" && !is.null(app$modules[[input$source_2]]$data)) {
 
           # get the reference file
-          plink_ref <- make_1000G_ref_subset(chrom = app$modules$gene$chr,
-                                             from  = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-                                             to    = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
+          plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
+                                       chrom    = app$modules$gene$chr,
+                                       from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                       to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
 
           # create the LD matrix for the region variants
           dat_ld_obj <- genepi.utils::ld_matrix(variants     = app$modules[[input$source_2]]$data,
@@ -311,8 +312,6 @@ mod_coloc_server <- function(id, app){
       # DATASET 1&2 Coloc SuSiE
       } else if(input$method=="Coloc" && input$assumption == "SuSiE" && !is.null(app$modules[[input$source_1]]$data) && !is.null(app$modules[[input$source_2]]$data)) {
 
-        browser()
-
         # harmonise the datasets
         harm <- genepi.utils::harmonise(gwas1 = app$modules[[input$source_1]]$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
                                         gwas2 = app$modules[[input$source_2]]$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
@@ -321,9 +320,10 @@ mod_coloc_server <- function(id, app){
                                         merge = c("SNP"="SNP"))
 
         # get the reference file
-        plink_ref <- make_1000G_ref_subset(chrom = app$modules$gene$chr,
-                                           from  = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-                                           to    = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
+        plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
+                                     chrom    = app$modules$gene$chr,
+                                     from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                     to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
 
         # create the LD matrix for the region variants
         dat_ld_obj1 <- genepi.utils::ld_matrix(variants     = harm[, list(RSID=RSID_d1,BP=BP_d1,EA=EA_d1,OA=OA_d1,BETA=BETA_d1,SE=SE_d1,EAF=EAF_d1,P=P_d1,N=N_d1)],
