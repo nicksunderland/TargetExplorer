@@ -20,9 +20,7 @@ mod_coloc_ui <- function(id){
                                hr(),
                                fluidRow(
                                  column(6,
-                                        selectInput(inputId = ns("source_1"),
-                                                    label   = "Dataset 1",
-                                                    choices = c("-")),
+                                        mod_source_select_ui(ns("source_1")),
                                         fluidRow(
                                           column(6,
                                                  prettyRadioButtons(inputId = ns("source_1_type"),
@@ -36,9 +34,7 @@ mod_coloc_ui <- function(id){
                                                               step  = 0.1))
                                         )),
                                  column(6,
-                                        selectInput(inputId = ns("source_2"),
-                                                    label   = "Dataset 2",
-                                                    choices = c("-")),
+                                        mod_source_select_ui(ns("source_2")),
                                         fluidRow(
                                           column(6,
                                                  prettyRadioButtons(inputId = ns("source_2_type"),
@@ -76,7 +72,7 @@ mod_coloc_ui <- function(id){
                                                         choices  = seq(0,1,by=0.1),
                                                         selected = 0.5,
                                                         grid     = TRUE),
-                                        )
+                                 )
                                ),
                                fluidRow(
                                  column(6,
@@ -149,6 +145,8 @@ mod_coloc_server <- function(id, app){
     data_mod      <- mod_data_server(id="data", gene_module=app$modules$gene)
     remove_mod    <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
     reference_mod <- mod_reference_server(id="reference", label="LD reference", gene_module=app$modules$gene)
+    source_1_mod  <- mod_source_select_server(id="source_1", app=app, source_type=c("GWAS","eQTL"), label="Dataset 1")
+    source_2_mod  <- mod_source_select_server(id="source_2", app=app, source_type=c("GWAS","eQTL"), label="Dataset 2")
 
 
     #==========================================
@@ -160,10 +158,10 @@ mod_coloc_server <- function(id, app){
       tryCatch({
 
         # DATASET 1 FINEMAP
-        if(input$method=="Finemap" && input$assumption == "Single" && input$downstream_dataset == "Dataset 1" && !is.null(app$modules[[input$source_1]]$data)) {
+        if(input$method=="Finemap" && input$assumption == "Single" && input$downstream_dataset == "Dataset 1" && !is.null(source_1_mod$data)) {
 
           # make and check the dataset
-          D1 <- make_coloc_dataset(dat  = app$modules[[input$source_1]]$data,
+          D1 <- make_coloc_dataset(dat  = source_1_mod$data,
                                    type = input$source_1_type,
                                    sdY  = input$sd_y1,
                                    ld   = NULL)
@@ -173,11 +171,11 @@ mod_coloc_server <- function(id, app){
           data_mod$source <- "Dataset 1"
           data_mod$data  <- calc_credible_set(rsids          = data_mod$data2$results$snp,
                                               snp.pp         = data_mod$data2$results$SNP.PP,
-                                              dat_join_to    = data.table::copy(app$modules[[input$source_1]]$data),
+                                              dat_join_to    = data.table::copy(source_1_mod$data),
                                               credible_set_p = input$credible_set_p)
 
-        # DATASET 1 SuSiE - finemap
-        } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 1" && !is.null(app$modules[[input$source_1]]$data)) {
+          # DATASET 1 SuSiE - finemap
+        } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 1" && !is.null(source_1_mod$data)) {
 
           # get the reference file
           plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
@@ -186,7 +184,7 @@ mod_coloc_server <- function(id, app){
                                        to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
 
           # create the LD matrix for the region variants
-          dat_ld_obj <- genepi.utils::ld_matrix(variants     = app$modules[[input$source_1]]$data,
+          dat_ld_obj <- genepi.utils::ld_matrix(variants     = source_1_mod$data,
                                                 with_alleles = TRUE,
                                                 plink2       = get_plink2_exe(),
                                                 plink_ref    = plink_ref)
@@ -206,15 +204,15 @@ mod_coloc_server <- function(id, app){
           data_mod$source <- "Dataset 1"
           data_mod$data   <- calc_credible_set(rsids          = names(data_mod$data2$pip),
                                                snp.pp         = data_mod$data2$pip,
-                                               dat_join_to    = data.table::copy(app$modules[[input$source_1]]$data),
+                                               dat_join_to    = data.table::copy(source_1_mod$data),
                                                credible_sets  = data_mod$data2$sets$cs,
                                                credible_set_p = NULL)
 
-        # DATASET 2 FINEMAP
-        } else if(input$method=="Finemap" && input$assumption == "Single" && input$downstream_dataset == "Dataset 2" && !is.null(app$modules[[input$source_2]]$data)) {
+          # DATASET 2 FINEMAP
+        } else if(input$method=="Finemap" && input$assumption == "Single" && input$downstream_dataset == "Dataset 2" && !is.null(source_2_mod$data)) {
 
           # make and check the dataset
-          D2 <- make_coloc_dataset(dat  = app$modules[[input$source_2]]$data,
+          D2 <- make_coloc_dataset(dat  = source_2_mod$data,
                                    type = input$source_2_type,
                                    sdY  = input$sd_y2,
                                    ld   = NULL)
@@ -224,11 +222,11 @@ mod_coloc_server <- function(id, app){
           data_mod$source <- "Dataset 2"
           data_mod$data  <- calc_credible_set(rsids          = data_mod$data2$results$snp,
                                               snp.pp         = data_mod$data2$results$SNP.PP,
-                                              dat_join_to    = data.table::copy(app$modules[[input$source_1]]$data),
+                                              dat_join_to    = data.table::copy(source_1_mod$data),
                                               credible_set_p = input$credible_set_p)
 
-        # DATASET 2 SuSiE - finemap
-        } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 2" && !is.null(app$modules[[input$source_2]]$data)) {
+          # DATASET 2 SuSiE - finemap
+        } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 2" && !is.null(source_2_mod$data)) {
 
           # get the reference file
           plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
@@ -237,7 +235,7 @@ mod_coloc_server <- function(id, app){
                                        to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
 
           # create the LD matrix for the region variants
-          dat_ld_obj <- genepi.utils::ld_matrix(variants     = app$modules[[input$source_2]]$data,
+          dat_ld_obj <- genepi.utils::ld_matrix(variants     = source_2_mod$data,
                                                 with_alleles = TRUE,
                                                 plink2       = get_plink2_exe(),
                                                 plink_ref    = plink_ref)
@@ -253,21 +251,21 @@ mod_coloc_server <- function(id, app){
           data_mod$data2$kriging_rss <- susieR::kriging_rss(D2$beta/(D2$varbeta ^ 0.5), dat_ld_obj[["ld_mat"]], n=D2$N)$conditional_dist
           data_mod$data2$kriging_rss$RSID <- D2$snp
           data_mod$data2$kriging_rss$outlier <- ifelse(data_mod$data2$kriging_rss$logLR  > 2 &
-                                                       abs(data_mod$data2$kriging_rss$z) > 2, TRUE, FALSE)
+                                                         abs(data_mod$data2$kriging_rss$z) > 2, TRUE, FALSE)
           data_mod$source <- "Dataset 2"
           data_mod$data   <- calc_credible_set(rsids          = names(data_mod$data2$pip),
                                                snp.pp         = data_mod$data2$pip,
-                                               dat_join_to    = data.table::copy(app$modules[[input$source_2]]$data),
+                                               dat_join_to    = data.table::copy(source_2_mod$data),
                                                credible_sets  = data_mod$data2$sets$cs,
                                                credible_set_p = NULL)
 
 
-        # DATASET 1&2 COLOC
-        } else if(input$method=="Coloc" && input$assumption == "Single" && !is.null(app$modules[[input$source_1]]$data) && !is.null(app$modules[[input$source_2]]$data)) {
+          # DATASET 1&2 COLOC
+        } else if(input$method=="Coloc" && input$assumption == "Single" && !is.null(source_1_mod$data) && !is.null(source_2_mod$data)) {
 
           # harmonise the datasets
-          harm <- genepi.utils::harmonise(gwas1 = app$modules[[input$source_1]]$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
-                                          gwas2 = app$modules[[input$source_2]]$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
+          harm <- genepi.utils::harmonise(gwas1 = source_1_mod$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
+                                          gwas2 = source_2_mod$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
                                           gwas1_trait = "d1",
                                           gwas2_trait = "d2",
                                           merge = c("SNP"="SNP"))
@@ -297,11 +295,11 @@ mod_coloc_server <- function(id, app){
           # populate data_mod$data with whichever dataset we plan on feeding downstream
           if(input$downstream_dataset == "Dataset 1") {
 
-            dat_join_to = app$modules[[input$source_1]]$data
+            dat_join_to = source_1_mod$data
 
           } else if(input$downstream_dataset == "Dataset 2") {
 
-            dat_join_to = app$modules[[input$source_2]]$data
+            dat_join_to = source_2_mod$data
 
           }
           data_mod$data <- calc_credible_set(rsids          = data_mod$data2$results$snp,
@@ -309,91 +307,91 @@ mod_coloc_server <- function(id, app){
                                              dat_join_to    = dat_join_to,
                                              credible_set_p = input$credible_set_p)
 
-      # DATASET 1&2 Coloc SuSiE
-      } else if(input$method=="Coloc" && input$assumption == "SuSiE" && !is.null(app$modules[[input$source_1]]$data) && !is.null(app$modules[[input$source_2]]$data)) {
+          # DATASET 1&2 Coloc SuSiE
+        } else if(input$method=="Coloc" && input$assumption == "SuSiE" && !is.null(source_1_mod$data) && !is.null(source_2_mod$data)) {
 
-        # harmonise the datasets
-        harm <- genepi.utils::harmonise(gwas1 = app$modules[[input$source_1]]$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
-                                        gwas2 = app$modules[[input$source_2]]$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
-                                        gwas1_trait = "d1",
-                                        gwas2_trait = "d2",
-                                        merge = c("SNP"="SNP"))
+          # harmonise the datasets
+          harm <- genepi.utils::harmonise(gwas1 = source_1_mod$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
+                                          gwas2 = source_2_mod$data[, list(SNP=RSID,RSID,CHR,BP,EA,OA,EAF,BETA,SE,P,N)],
+                                          gwas1_trait = "d1",
+                                          gwas2_trait = "d2",
+                                          merge = c("SNP"="SNP"))
 
-        # get the reference file
-        plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
-                                     chrom    = app$modules$gene$chr,
-                                     from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-                                     to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
+          # get the reference file
+          plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
+                                       chrom    = app$modules$gene$chr,
+                                       from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                       to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
 
-        # create the LD matrix for the region variants
-        dat_ld_obj1 <- genepi.utils::ld_matrix(variants     = harm[, list(RSID=RSID_d1,BP=BP_d1,EA=EA_d1,OA=OA_d1,BETA=BETA_d1,SE=SE_d1,EAF=EAF_d1,P=P_d1,N=N_d1)],
-                                               with_alleles = TRUE,
-                                               plink2       = get_plink2_exe(),
-                                               plink_ref    = plink_ref)
-        dat_ld_obj2 <- genepi.utils::ld_matrix(variants     = harm[, list(RSID=RSID_d2,BP=BP_d2,EA=EA_d2,OA=OA_d2,BETA=BETA_d2,SE=SE_d2,EAF=EAF_d2,P=P_d2,N=N_d2)],
-                                               with_alleles = TRUE,
-                                               plink2       = get_plink2_exe(),
-                                               plink_ref    = plink_ref)
+          # create the LD matrix for the region variants
+          dat_ld_obj1 <- genepi.utils::ld_matrix(variants     = harm[, list(RSID=RSID_d1,BP=BP_d1,EA=EA_d1,OA=OA_d1,BETA=BETA_d1,SE=SE_d1,EAF=EAF_d1,P=P_d1,N=N_d1)],
+                                                 with_alleles = TRUE,
+                                                 plink2       = get_plink2_exe(),
+                                                 plink_ref    = plink_ref)
+          dat_ld_obj2 <- genepi.utils::ld_matrix(variants     = harm[, list(RSID=RSID_d2,BP=BP_d2,EA=EA_d2,OA=OA_d2,BETA=BETA_d2,SE=SE_d2,EAF=EAF_d2,P=P_d2,N=N_d2)],
+                                                 with_alleles = TRUE,
+                                                 plink2       = get_plink2_exe(),
+                                                 plink_ref    = plink_ref)
 
-        # make and check the dataset 1
-        D1 <- make_coloc_dataset(dat  = dat_ld_obj1[["dat"]],
-                                 type = input$source_1_type,
-                                 sdY  = input$sd_y1,
-                                 ld   = dat_ld_obj1[["ld_mat"]])
+          # make and check the dataset 1
+          D1 <- make_coloc_dataset(dat  = dat_ld_obj1[["dat"]],
+                                   type = input$source_1_type,
+                                   sdY  = input$sd_y1,
+                                   ld   = dat_ld_obj1[["ld_mat"]])
 
-        # make and check the dataset 2
-        D2 <- make_coloc_dataset(dat  = dat_ld_obj2[["dat"]],
-                                 type = input$source_2_type,
-                                 sdY  = input$sd_y2,
-                                 ld   = dat_ld_obj2[["ld_mat"]])
-
-
-        # run SuSiE
-        D1_susie <- coloc::runsusie(D1, coverage=input$credible_set_p)
-        D2_susie <- coloc::runsusie(D2, coverage=input$credible_set_p)
-
-        # run the coloc abf function
-        res <- coloc::coloc.susie(D1_susie, D2_susie)
+          # make and check the dataset 2
+          D2 <- make_coloc_dataset(dat  = dat_ld_obj2[["dat"]],
+                                   type = input$source_2_type,
+                                   sdY  = input$sd_y2,
+                                   ld   = dat_ld_obj2[["ld_mat"]])
 
 
-        # Browse[1]>  print(res$summary)
-        # nsnps            hit1            hit2     PP.H0.abf     PP.H1.abf     PP.H2.abf    PP.H3.abf     PP.H4.abf  idx1  idx2
-        # <int>          <char>          <char>         <num>         <num>         <num>        <num>         <num> <int> <int>
-        #   1:   390  rs10305435_C_T  rs10305435_C_T 2.190624e-175  2.093143e-89  2.093143e-89 0.000000e+00  1.000000e+00     1     1
-        # 2:   390  rs10305445_C_T  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  1.628576e-88     2     1
-        # 3:   390   rs2300613_G_A  rs10305435_C_T 5.057475e-161  1.046572e-86  4.832421e-75 1.000000e+00  9.458692e-46     3     1
-        # 4:   390   rs2300614_A_G  rs10305435_C_T 6.092174e-263  1.046572e-86 5.821077e-177 1.000000e+00  8.832468e-88     4     1
-        # 5:   390    rs877446_A_G  rs10305435_C_T 3.379615e-298  1.046572e-86 3.229225e-212 1.000000e+00  1.935952e-85     6     1
-        # 6:   390  rs10305442_A_G  rs10305435_C_T 2.369280e-277  1.046572e-86 2.263849e-191 1.000000e+00  1.214910e-88     7     1
-        # 7:   390 rs115493670_C_T  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  4.568936e-89     8     1
-        # 8:   390   rs9283907_A_G  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  1.434933e-88     9     1
-        # 9:   390   rs9283906_T_C  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  4.752047e-89    10     1
-        # 10:   390   rs2235868_A_C  rs10305435_C_T 3.821291e-149  1.046572e-86  3.651246e-63 1.000000e+00  3.825684e-25     5     1
-        # 11:   390  rs10305435_C_T  rs10305445_C_T  0.000000e+00  0.000000e+00  1.046572e-86 1.000000e+00  1.628576e-88     1     2
+          # run SuSiE
+          D1_susie <- coloc::runsusie(D1, coverage=input$credible_set_p)
+          D2_susie <- coloc::runsusie(D2, coverage=input$credible_set_p)
 
-        #
-        #
-        # # assign the results
-        # data_mod$data2 <- res
-        # data_mod$source <- "Coloc"
-        #
-        # # populate data_mod$data with whichever dataset we plan on feeding downstream
-        # if(input$downstream_dataset == "Dataset 1") {
-        #
-        #   dat_join_to = app$modules[[input$source_1]]$data
-        #
-        # } else if(input$downstream_dataset == "Dataset 2") {
-        #
-        #   dat_join_to = app$modules[[input$source_2]]$data
-        #
-        # }
-        # data_mod$data <- calc_credible_set(rsids          = data_mod$data2$results$snp,
-        #                                    snp.pp         = data_mod$data2$results$SNP.PP.H4,
-        #                                    dat_join_to    = dat_join_to,
-        #                                    credible_set_p = input$credible_set_p)
-        #
+          # run the coloc abf function
+          res <- coloc::coloc.susie(D1_susie, D2_susie)
 
-      }
+
+          # Browse[1]>  print(res$summary)
+          # nsnps            hit1            hit2     PP.H0.abf     PP.H1.abf     PP.H2.abf    PP.H3.abf     PP.H4.abf  idx1  idx2
+          # <int>          <char>          <char>         <num>         <num>         <num>        <num>         <num> <int> <int>
+          #   1:   390  rs10305435_C_T  rs10305435_C_T 2.190624e-175  2.093143e-89  2.093143e-89 0.000000e+00  1.000000e+00     1     1
+          # 2:   390  rs10305445_C_T  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  1.628576e-88     2     1
+          # 3:   390   rs2300613_G_A  rs10305435_C_T 5.057475e-161  1.046572e-86  4.832421e-75 1.000000e+00  9.458692e-46     3     1
+          # 4:   390   rs2300614_A_G  rs10305435_C_T 6.092174e-263  1.046572e-86 5.821077e-177 1.000000e+00  8.832468e-88     4     1
+          # 5:   390    rs877446_A_G  rs10305435_C_T 3.379615e-298  1.046572e-86 3.229225e-212 1.000000e+00  1.935952e-85     6     1
+          # 6:   390  rs10305442_A_G  rs10305435_C_T 2.369280e-277  1.046572e-86 2.263849e-191 1.000000e+00  1.214910e-88     7     1
+          # 7:   390 rs115493670_C_T  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  4.568936e-89     8     1
+          # 8:   390   rs9283907_A_G  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  1.434933e-88     9     1
+          # 9:   390   rs9283906_T_C  rs10305435_C_T  0.000000e+00  1.046572e-86  0.000000e+00 1.000000e+00  4.752047e-89    10     1
+          # 10:   390   rs2235868_A_C  rs10305435_C_T 3.821291e-149  1.046572e-86  3.651246e-63 1.000000e+00  3.825684e-25     5     1
+          # 11:   390  rs10305435_C_T  rs10305445_C_T  0.000000e+00  0.000000e+00  1.046572e-86 1.000000e+00  1.628576e-88     1     2
+
+          #
+          #
+          # # assign the results
+          # data_mod$data2 <- res
+          # data_mod$source <- "Coloc"
+          #
+          # # populate data_mod$data with whichever dataset we plan on feeding downstream
+          # if(input$downstream_dataset == "Dataset 1") {
+          #
+          #   dat_join_to = source_1_mod$data
+          #
+          # } else if(input$downstream_dataset == "Dataset 2") {
+          #
+          #   dat_join_to = source_2_mod$data
+          #
+          # }
+          # data_mod$data <- calc_credible_set(rsids          = data_mod$data2$results$snp,
+          #                                    snp.pp         = data_mod$data2$results$SNP.PP.H4,
+          #                                    dat_join_to    = dat_join_to,
+          #                                    credible_set_p = input$credible_set_p)
+          #
+
+        }
 
         # button text back to black
         shinyjs::runjs(paste0('document.getElementById("', ns("run"), '").style.color = "black";'))
@@ -426,7 +424,7 @@ mod_coloc_server <- function(id, app){
                       input$assumption,
                       input$method,
                       input$credible_set_p
-                      ), {
+    ), {
 
       shinyjs::runjs(paste0('document.getElementById("', ns("run"), '").style.color = "red";'))
 
@@ -497,7 +495,7 @@ mod_coloc_server <- function(id, app){
 
       # check data
       validate(
-        need(!is.null(app$modules[[input$source_1]]$data) | !is.null(app$modules[[input$source_2]]$data), 'No data imported for either dataset')
+        need(!is.null(source_1_mod$data) | !is.null(source_2_mod$data), 'No data imported for either dataset')
       )
 
       # colours
@@ -515,9 +513,9 @@ mod_coloc_server <- function(id, app){
       y_max <- c(NA_real_, NA_real_)
 
       # plot source 1 data positive
-      if(!is.null(app$modules[[input$source_1]]$data)) {
+      if(!is.null(source_1_mod$data)) {
 
-        y_max[[1]] <- max(app$modules[[input$source_1]]$data$nlog10P, na.rm=TRUE)
+        y_max[[1]] <- max(source_1_mod$data$nlog10P, na.rm=TRUE)
 
         p <- p +
           annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05)
@@ -542,7 +540,7 @@ mod_coloc_server <- function(id, app){
                              max.overlaps = Inf) +
             labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
 
-        # COLOC SOURCE 1 - plot the points
+          # COLOC SOURCE 1 - plot the points
         } else if(!is.null(data_mod$data) && data_mod$source == "Coloc") {
 
           # if data_mod$source == "Coloc"
@@ -550,8 +548,8 @@ mod_coloc_server <- function(id, app){
           # PP<num>, coloc<lgl>, credible_set<fct>
 
           # join to data source
-          plot_data <- app$modules[[input$source_1]]$data[data_mod$data[, list(RSID,PP,coloc,credible_set)], on="RSID"]
-          plot_data[app$modules[[input$source_2]]$data, nlog10P_lower := i.nlog10P, on="RSID"]
+          plot_data <- source_1_mod$data[data_mod$data[, list(RSID,PP,coloc,credible_set)], on="RSID"]
+          plot_data[source_2_mod$data, nlog10P_lower := i.nlog10P, on="RSID"]
 
           p <- p +
             geom_point(data    = plot_data,
@@ -567,11 +565,11 @@ mod_coloc_server <- function(id, app){
             labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
 
 
-        # RAW SOURCE 1 - plot the points
+          # RAW SOURCE 1 - plot the points
         } else {
 
           p <- p +
-            geom_point(data    = app$modules[[input$source_1]]$data,
+            geom_point(data    = source_1_mod$data,
                        mapping = aes(x=BP, y=nlog10P),
                        color   = "lightgray")
 
@@ -580,9 +578,9 @@ mod_coloc_server <- function(id, app){
       }
 
       # plot source 2 data negative
-      if(!is.null(app$modules[[input$source_2]]$data)) {
+      if(!is.null(source_2_mod$data)) {
 
-        y_max[[2]] <- max(app$modules[[input$source_2]]$data$nlog10P, na.rm=TRUE)
+        y_max[[2]] <- max(source_2_mod$data$nlog10P, na.rm=TRUE)
 
         p <- p +
           annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=-Inf, ymax=0, fill="blue", alpha = 0.05)
@@ -607,7 +605,7 @@ mod_coloc_server <- function(id, app){
                              max.overlaps = Inf) +
             labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
 
-        # COLOC SOURCE 2 - plot the points
+          # COLOC SOURCE 2 - plot the points
         } else if(!is.null(data_mod$data) && data_mod$source == "Coloc") {
 
           # if data_mod$source == "Coloc"
@@ -615,7 +613,7 @@ mod_coloc_server <- function(id, app){
           # PP<num>, coloc<lgl>, credible_set<fct>
 
           # join to data source
-          plot_data <- app$modules[[input$source_2]]$data[data_mod$data[, list(RSID,PP,coloc,credible_set)], on="RSID"]
+          plot_data <- source_2_mod$data[data_mod$data[, list(RSID,PP,coloc,credible_set)], on="RSID"]
 
           p <- p +
             geom_point(data    = plot_data,
@@ -626,11 +624,11 @@ mod_coloc_server <- function(id, app){
             labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
 
 
-        # RAW SOURCE 2 - plot the points
+          # RAW SOURCE 2 - plot the points
         } else {
 
           p <- p +
-            geom_point(data    = app$modules[[input$source_2]]$data,
+            geom_point(data    = source_2_mod$data,
                        mapping = aes(x=BP, y=-nlog10P),
                        color   = "darkgray")
 
@@ -638,7 +636,7 @@ mod_coloc_server <- function(id, app){
       }
 
       # if two sets of data
-      if(!is.null(app$modules[[input$source_1]]$data) && !is.null(app$modules[[input$source_2]]$data)) {
+      if(!is.null(source_1_mod$data) && !is.null(source_2_mod$data)) {
 
         # draw the x-axis at y=0
         p <- p + geom_hline(yintercept = 0)
@@ -808,7 +806,7 @@ calc_credible_set <- function(rsids, snp.pp, dat_join_to, credible_sets=NULL, cr
     # add coloc flag
     dat_pp[, coloc := ifelse(!is.na(credible_set), TRUE, FALSE)]
 
-  # standard signle variant assumption
+    # standard signle variant assumption
   } else if(!is.null(credible_set_p)) {
 
     # order and get cumulative posterior probability
