@@ -19,22 +19,7 @@ mod_eqtl_ui <- function(id){
                                hr(),
                                mod_data_ui(id=ns("data")),
                                hr(),
-                               mod_clump_ui(id=ns("clump")),
-                               hr(),
-                               fluidRow(
-                                 column(6,
-                                        selectInput(inputId = ns("source_2"),
-                                                    label   = "Upstream data",
-                                                    choices = c("off"))
-                                 ),
-                                 column(6,
-                                        selectInput(inputId  = ns("source_2_filter"),
-                                                    label    = "Upstream filter",
-                                                    choices  = c("All"),
-                                                    selected = "All")
-                                 ),
-                               ),
-                               uiOutput(ns("upstream_controls"))
+                               mod_grouping_ui(id=ns("grouping"))
                   ), # sidebar panel end
                   mainPanel(width = 9,
                             # Locus zoom plot
@@ -61,7 +46,6 @@ mod_eqtl_ui <- function(id){
                             ),
                   ) # main panel end
     ), # sidebar layout end
-    hr()
   ) # div end
 }
 
@@ -82,32 +66,9 @@ mod_eqtl_server <- function(id, app){
     #==========================================
     # Data module server for the eQTL module
     #==========================================
-    data_mod   <- mod_data_server(id="data", gene_module=app$modules$gene)
-    clump_mod  <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
-    remove_mod <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
-
-
-    #==========================================
-    # Observe additions / deletions of upstream source modules
-    #==========================================
-    session$userData[[ns("app-modules")]] <- observeEvent(app$modules, {
-      updateSelectInput(session, inputId="source_2", choices=c("off", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
-    })
-
-
-    #==========================================
-    # Observe input selection for choices init as observing just app$modules doesn't work at module init...
-    #==========================================
-    session$userData[[ns("source_2")]] <- observeEvent(input$source_2, {
-      if(is.null(input$source_2) || input$source_2=="") {
-        updateSelectInput(session, inputId="source_2", choices=c("off", names(app$modules)[!names(app$modules) %in% c("gene",id)]))
-      }
-      if(!is.null(app$modules[[input$source_2]]$data)) {
-        source_cols <- names(app$modules[[input$source_2]]$data)
-        possible_filters <- source_cols[source_cols %in% c('index','coloc')]
-        updateSelectInput(session, inputId="source_2_filter", choices=c("All",possible_filters))
-      }
-    })
+    data_mod     <- mod_data_server(id="data", gene_module=app$modules$gene)
+    grouping_mod <- mod_grouping_server(id="grouping", gene_module=app$modules$gene, data_module=data_mod)
+    remove_mod   <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
 
 
     #==========================================
@@ -161,7 +122,6 @@ mod_eqtl_server <- function(id, app){
         p <- ggplot2::ggplot(data = data_mod$data,
                              mapping = ggplot2::aes(x = RSID_beta, y = STUDY, fill=BETA)) + #beta_dnorm)) +
           ggplot2::geom_tile() +
-          # viridis::scale_fill_viridis(option="inferno", direction=-1) +
           ggplot2::scale_fill_gradient2(low="red",mid="black",high="green", limits=c(-0.5,0.5), oob=scales::squish) +
           ggplot2::theme(axis.text.x = ggplot2::element_blank()) +
           ggplot2::labs(x = "RSID", y = "Dataset (study)", fill="\u03B2") +
@@ -198,20 +158,6 @@ mod_eqtl_server <- function(id, app){
 
 
     #==========================================
-    # reset filtering of upstream variants
-    #==========================================
-    session$userData[[ns("reset")]] <- observeEvent(input$reset, {
-
-      if("eqtl" %in% names(data_mod$data)) {
-        data_mod$data[, eqtl := NULL]
-        tmp <- data.table::copy(data_mod$data)
-        data_mod$data <- NULL
-        data_mod$data <- tmp
-      }
-
-    })
-
-    #==========================================
     # apply filtering of upstream variants
     #==========================================
     session$userData[[ns("apply")]] <- observeEvent(input$apply, {
@@ -220,7 +166,7 @@ mod_eqtl_server <- function(id, app){
       req(data_mod$data, input$datasets, input$beta_dir, input$dataset_combine_method, input$source_2, input$source_2_filter)
 
       # if clumped, then only use clumped data; else take all variant forward
-      if(all(c("clump","index") %in% names(data_mod$data))) {
+      if(all(c("group","index") %in% names(data_mod$data))) {
 
         data_mod$data[, eqtl := ifelse(index==TRUE, TRUE, FALSE)]
 
@@ -362,17 +308,17 @@ mod_eqtl_server <- function(id, app){
         }
 
       # if we only have clumped data but no eQTL flag yet, plot that
-      } else if(all(c("clump","index") %in% names(data_mod$data))) {
+      } else if(all(c("group","index") %in% names(data_mod$data))) {
 
         # add points and colours for clumps
         p <- p +
           geom_point(color="lightgray") +
-          geom_point(data = data_mod$data[!is.na(data_mod$data$clump), ],            mapping = aes(x=BP, y=nlog10P, color=clump, fill=clump),inherit.aes=FALSE, shape=23) +
+          geom_point(data = data_mod$data[!is.na(data_mod$data$group), ],            mapping = aes(x=BP, y=nlog10P, color=group, fill=group),inherit.aes=FALSE, shape=23) +
           geom_vline(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(xintercept=BP), linetype="dotted", color="darkred") +
           geom_point(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(x=BP, y=nlog10P),inherit.aes=FALSE, size=3, fill="red", color="red", shape=24) +
-          geom_label(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(label=clump, x=BP, y=-0.5), inherit.aes=FALSE) +
+          geom_label(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(label=group, x=BP, y=-0.5), inherit.aes=FALSE) +
           geom_label_repel(data = data_mod$data[which(data_mod$data$index==TRUE), ], mapping = aes(label=RSID,  x=BP, y=nlog10P), inherit.aes=FALSE) +
-          labs(color = "Clump", fill = "Clump")
+          labs(color = "Group", fill = "Group")
 
       # base case - not eQTL or clump flag present
       } else {

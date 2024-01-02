@@ -717,116 +717,58 @@ mod_coloc_server <- function(id, app){
 
 
 
-make_coloc_dataset <- function(dat, type, sdY=NA_real_, ld=NULL) {
-
-  # checks
-  type <- match.arg(type, choices = c("quant","cc"))
-  if(type=="quant") {
-    stopifnot("Standard names missing from the input to make a coloc dataset" = all(c("RSID","BP","BETA","SE") %in% names(dat)))
-    stopifnot("Standard data missing from the input to make a coloc dataset" = all(!is.null(sdY) | c("EAF","N") %in% names(dat)))
-  } else {
-    stopifnot("Standard names missing from the input to make a coloc dataset" = all(c("RSID","BP","BETA","SE") %in% names(dat)))
-  }
-
-  # make multiallelic variants unique ids
-  if("RSID_allele" %in% names(dat)) {
-    dat[, RSID := RSID_allele]
-  }
-
-  # test for and deal with duplicate IDs
-  if(sum(duplicated(dat$RSID), na.rm=TRUE) > 0) {
-    dat <- dat[dat[, .I[which.min(P)], by=RSID]$V1]
-    showNotification("Duplicate RSIDs found in source 1, taking the lowest P-value variant", type="warning")
-  }
-
-  # create the base coloc object
-  D1 <- list(
-    snp      = dat$RSID,
-    position = dat$BP,
-    beta     = dat$BETA,
-    varbeta  = dat$SE ^ 2,
-    type     = type
-  )
-
-  # add additional parameters if provided
-  if(all(c("EAF","N") %in% names(dat))) {
-    D1$MAF <- dat$EAF
-    D1$N   <- max(dat$N, na.rm=T)
-  }
-  if(!is.na(sdY)) {
-    D1$sdY <- sdY
-  }
-  if(!is.null(ld)) {
-    D1$LD <- ld
-  }
-
-  # check the dataset
-  tryCatch({
-    if(!is.null(ld)) {
-      coloc::check_dataset(D1, req="LD")
-    } else {
-      coloc::check_dataset(D1)
-    }
-  },
-  error=function(e) {
-    showNotification(paste0("Coloc dataset check failed - ", e), type="error", duration=10)
-    return(NULL)
-  })
-
-  # return the object
-  return(D1)
-}
 
 
 
-
-calc_credible_set <- function(rsids, snp.pp, dat_join_to, credible_sets=NULL, credible_set_p=NULL) {
-
-  # checks
-  stopifnot("Either pass credible_sets (coloc::runsusie [result]$sets$cs output) or credible_set_p, not both" = sum(sapply(list(credible_sets, credible_set_p), is.null))==1)
-
-  # table the rsids and posterior probability
-  # table the vectors
-  dat_pp <- data.table::data.table(RSID = sub("^(rs[0-9]+).*","\\1", rsids),
-                                   PP = snp.pp)
-
-  # susie output
-  if(!is.null(credible_sets)) {
-
-    # extract the credible sets to dt
-    cs <- data.table::data.table(RSID          = sub("L[0-9]+\\.(rs[0-9]+).*","\\1",names(unlist(credible_sets))),
-                                 credible_set  = sub("L([0-9]+)\\..*","\\1",names(unlist(credible_sets))))
-
-    # credible set factor
-    cs[, credible_set := factor(credible_set, levels=sort(unique(as.integer(credible_set))))]
-
-    # join to PP
-    dat_pp[cs, credible_set := i.credible_set, on="RSID"]
-
-    # add coloc flag
-    dat_pp[, coloc := ifelse(!is.na(credible_set), TRUE, FALSE)]
-
-    # standard signle variant assumption
-  } else if(!is.null(credible_set_p)) {
-
-    # order and get cumulative posterior probability
-    dat_pp[order(PP, decreasing=TRUE), CUMSUM_PP := cumsum(PP)]
-
-    # determine credible set - flag as coloc (i.e. when is the cumulative probability > 95% / whatever indicated)
-    dat_pp[order(CUMSUM_PP), coloc := ifelse(.I <= which(CUMSUM_PP >= credible_set_p)[1], TRUE, FALSE)]
-
-    # credible set factor
-    dat_pp[, credible_set := ifelse(coloc, 1, NA)]
-    dat_pp[, credible_set := factor(credible_set, levels=c(1))]
-
-  }
-
-  # join to the provided data
-  dat_join_to[dat_pp, c("PP","coloc","credible_set") := list(i.PP, i.coloc, i.credible_set), on="RSID"]
-
-  # return the data
-  return(dat_join_to)
-}
+#
+#
+# calc_credible_set <- function(rsids, snp.pp, dat_join_to, credible_sets=NULL, credible_set_p=NULL) {
+#
+#   # checks
+#   stopifnot("Either pass credible_sets (coloc::runsusie [result]$sets$cs output) or credible_set_p, not both" = sum(sapply(list(credible_sets, credible_set_p), is.null))==1)
+#
+#   # table the rsids and posterior probability
+#   # table the vectors
+#   dat_pp <- data.table::data.table(RSID = sub("(rs[0-9]+).*","\\1", rsids),
+#                                    PP = snp.pp)
+#
+#   # susie output
+#   if(!is.null(credible_sets)) {
+#
+#     # extract the credible sets to dt
+#     cs <- data.table::data.table(RSID          = sub("L[0-9]+\\.(rs[0-9]+).*","\\1",names(unlist(credible_sets))),
+#                                  credible_set  = sub("L([0-9]+)\\..*","\\1",names(unlist(credible_sets))))
+#
+#     # credible set factor
+#     cs[, credible_set := factor(credible_set, levels=sort(unique(as.integer(credible_set))))]
+#
+#     # join to PP
+#     dat_pp[cs, credible_set := i.credible_set, on="RSID"]
+#
+#     # add coloc flag
+#     dat_pp[, coloc := ifelse(!is.na(credible_set), TRUE, FALSE)]
+#
+#     # standard signle variant assumption
+#   } else if(!is.null(credible_set_p)) {
+#
+#     # order and get cumulative posterior probability
+#     dat_pp[order(PP, decreasing=TRUE), CUMSUM_PP := cumsum(PP)]
+#
+#     # determine credible set - flag as coloc (i.e. when is the cumulative probability > 95% / whatever indicated)
+#     dat_pp[order(CUMSUM_PP), coloc := ifelse(.I <= which(CUMSUM_PP >= credible_set_p)[1], TRUE, FALSE)]
+#
+#     # credible set factor
+#     dat_pp[, credible_set := ifelse(coloc, 1, NA)]
+#     dat_pp[, credible_set := factor(credible_set, levels=c(1))]
+#
+#   }
+#
+#   # join to the provided data
+#   dat_join_to[dat_pp, c("PP","coloc","credible_set") := list(i.PP, i.coloc, i.credible_set), on="RSID"]
+#
+#   # return the data
+#   return(dat_join_to)
+# }
 
 
 

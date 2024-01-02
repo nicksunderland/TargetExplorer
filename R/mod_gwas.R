@@ -20,14 +20,18 @@ mod_gwas_ui <- function(id){
                                hr(),
                                mod_data_ui(id=ns("data")),
                                hr(),
-                               mod_clump_ui(id=ns("clump"))
+                               mod_grouping_ui(id=ns("grouping"))
                   ), # sidebar panel end
                   mainPanel(width = 9,
+                            fluidRow(
+                              column(6, p(strong("Locus plot:"))),
+                              column(1, p(strong("Sensitivity:"), style="text-align:right; margin-top: 6px;")),
+                              column(2, selectInput(inputId = ns("sensitivity_plot"), label=NULL, choices = c("Off"), selected = "Off")),
+                              column(1, p(strong("Source:"), style="text-align:right; margin-top: 6px;")),
+                              column(2, mod_source_select_ui(id=ns("sensitivity_source")))
+                            ),
                             # Locus zoom plot
-                            p(strong("Locus plot:")),
-                            plotOutput(outputId = ns("locus_plot"),
-                                       height   = "500px",
-                                       brush    = ns("locus_plot_brush")),
+                            uiOutput(outputId = ns("plot_area")),
                             tableOutput(outputId = ns("locus_plot_table")),
                   ) # main panel end
     ), # sidebar layout end
@@ -45,15 +49,63 @@ mod_gwas_server <- function(id, app){
     cli::cli_alert_info(paste0("initialising mod_gwas_server(ns=",ns("foo"),")"))
 
     # R CMD checks
-    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
+    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- group <- log10P <- SNP <- index <- nlog10P <- NULL
 
 
     #==========================================
     # Data, clump, and remove (sub)module servers for the GWAS module
     #==========================================
-    data_mod   <- mod_data_server(id="data", gene_module=app$modules$gene)
-    clump_mod  <- mod_clump_server(id="clump", gene_module=app$modules$gene, data_module=data_mod)
-    remove_mod <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
+    data_mod     <- mod_data_server(id="data", gene_module=app$modules$gene)
+    grouping_mod <- mod_grouping_server(id="grouping", gene_module=app$modules$gene, data_module=data_mod)
+    remove_mod   <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
+    sensitivity_source_mod <- mod_source_select_server(id="sensitivity_source", app=app, source_type=c("GWAS","eQTL","Coloc"), label=NULL)
+
+
+    #==========================================
+    # Observe the grouping input
+    #==========================================
+    observeEvent(grouping_mod$grouping, {
+
+      sensitivity_plot_choices <- switch(grouping_mod$grouping,
+                                         "Off"          = c("Off"),
+                                         "plink::clump" = c("Off", "LD structure", "Clump exp-out corr"),
+                                         "r-coloc"      = c("Off", "LD structure", "Kriging plot"),
+                                         "r-susieR"     = c("Off", "LD structure", "Kriging plot"))
+
+      updateSelectInput(inputId = "sensitivity_plot", choices = sensitivity_plot_choices)
+
+    })
+
+    #==========================================
+    # Observe the sensitivity input
+    #==========================================
+    output$plot_area <- renderUI({
+
+      if(is.null(input$sensitivity_plot) || input$sensitivity_plot == "Off") {
+
+        plot_area <- column(12,
+                            plotOutput(outputId = ns("locus_plot"),
+                                       height   = "550px",
+                                       brush    = ns("locus_plot_brush"))
+                            )
+        return(plot_area)
+
+      } else {
+
+        plot_area <- fluidRow(
+          column(8,
+                 plotOutput(outputId = ns("locus_plot"),
+                            height   = "550px",
+                            brush    = ns("locus_plot_brush"))),
+          column(4,
+                 plotOutput(outputId = ns("sensitivity_plot"),
+                            height   = "550px"))
+        )
+        return(plot_area)
+
+      }
+
+    })
 
 
     #==========================================
@@ -66,9 +118,6 @@ mod_gwas_server <- function(id, app){
         need(!is.null(data_mod$data), 'No data imported, click the import button')
       )
 
-      # colours
-      color_list = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
-
       # create the locus plot
       p <- ggplot(data    = data_mod$data,
                   mapping = aes(x=BP, y=nlog10P)) +
@@ -79,7 +128,8 @@ mod_gwas_server <- function(id, app){
         lims(x = c(app$modules$gene$start - app$modules$gene$flanks_kb*1000, app$modules$gene$end + app$modules$gene$flanks_kb*1000),
              y = c(-2.5, max(8.0, max(data_mod$data$nlog10P)))) +
         labs(x        = paste0("Chromosome ", app$modules$gene$chr, " position"),
-             y        = expression(paste("-log"[10], plain(P))))
+             y        = expression(paste("-log"[10], plain(P))),
+             subtitle = data_mod$source_id)
 
       # if gene data then add
       if(!is.null(data_mod$data2)) {
@@ -102,14 +152,14 @@ mod_gwas_server <- function(id, app){
       }
 
       # if there is clumped data, plot
-      if(all(c("index","clump") %in% colnames(data_mod$data))) {
+      if(all(c("index","group") %in% colnames(data_mod$data))) {
         p <- p +
-          geom_point(data = data_mod$data[!is.na(data_mod$data$clump), ],            mapping = aes(x=BP, y=nlog10P, color=clump, fill=clump), shape=23) +
+          geom_point(data = data_mod$data[!is.na(data_mod$data$group), ],            mapping = aes(x=BP, y=nlog10P, color=group, fill=group), shape=23) +
           geom_vline(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(xintercept=BP), linetype="dotted", color="darkred") +
           geom_point(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(x=BP, y=nlog10P), size=3, fill="red", color="red", shape=24) +
-          geom_label(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(label=clump, x=BP, y=-0.5)) +
+          geom_label(data = data_mod$data[which(data_mod$data$index==TRUE), ],       mapping = aes(label=group, x=BP, y=-0.5)) +
           geom_label_repel(data = data_mod$data[which(data_mod$data$index==TRUE), ], mapping = aes(label=RSID,  x=BP, y=nlog10P)) +
-          labs(color = "Clump", fill = "Clump")
+          labs(color = "Group", fill = "Group")
 
 
       }
@@ -134,6 +184,132 @@ mod_gwas_server <- function(id, app){
       error = function(e) {
         return(NULL)
       })
+    })
+
+
+    #==========================================
+    # Sensitivity plots
+    #==========================================
+    output$sensitivity_plot <- renderPlot({
+
+      # check data
+      validate(
+        need(!is.null(input$sensitivity_plot) && input$sensitivity_plot != "Off", 'No sensitivity plots selected'),
+        need(!is.null(data_mod$data), 'No GWAS data loaded')
+      )
+
+      # LD structure plots
+      if(input$sensitivity_plot == "LD structure") {
+
+        validate(
+          need(!is.null(data_mod$ld_matrix_r2) | !is.null(data_mod$ld_matrix_r), 'No LD data - run clumping'),
+        )
+
+        # R2 data
+        if(is.null(data_mod$ld_matrix_r2)) {
+          p_r2 <- NULL
+        } else {
+          upper_tri <- data_mod$ld_matrix_r2
+          upper_tri[lower.tri(upper_tri)] <- NA
+          upper_tri <- reshape2::melt(upper_tri, na.rm=TRUE)
+          p_r2 <- ggplot(data = upper_tri,
+                         mapping = aes(Var1, Var2, fill=value)) +
+            geom_tile() +
+            scale_fill_gradient(low="lightyellow", high="red", limits=c(0,1)) +
+            labs(fill = "r2") +
+            theme(axis.title.x = element_blank(),
+                  axis.text.x  = element_blank(),
+                  axis.ticks.x = element_blank(),
+                  axis.title.y = element_blank(),
+                  axis.text.y  = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  legend.position = c(.95, .05),
+                  legend.justification = c("right", "bottom"),
+                  legend.box.just = "right",
+                  legend.margin = margin(6, 6, 6, 6))
+        }
+
+        # R corr data
+        if(is.null(data_mod$ld_matrix_r)) {
+          p_r <- NULL
+        } else {
+          upper_tri <- data_mod$ld_matrix_r
+          upper_tri[lower.tri(upper_tri)] <- NA
+          upper_tri <- reshape2::melt(upper_tri, na.rm=TRUE)
+          p_r  <- ggplot(data = upper_tri,
+                         mapping = aes(Var1, Var2, fill=value)) +
+            geom_tile() +
+            scale_fill_gradient2(low="darkblue", mid = "white", high="red", midpoint = 0, limits=c(-1,1)) +
+            labs(fill = "r") +
+            theme(axis.title.x = element_blank(),
+                  axis.text.x  = element_blank(),
+                  axis.ticks.x = element_blank(),
+                  axis.title.y = element_blank(),
+                  axis.text.y  = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  legend.position = c(.95, .05),
+                  legend.justification = c("right", "bottom"),
+                  legend.box.just = "right",
+                  legend.margin = margin(6, 6, 6, 6))
+        }
+
+        # combine the heat maps
+        p <- ggpubr::ggarrange(plotlist = list(p_r2, p_r), ncol = 1)
+
+
+     # Clumping exposure-outcome correlation plots
+     } else if(input$sensitivity_plot == "Clump exp-out corr") {
+
+       validate(
+         need("group" %in% names(data_mod$data), 'No clumping data found - run clumping'),
+         need(!is.null(sensitivity_source_mod$data), 'No source data - select a source'),
+       )
+
+       # harmonise the datasets
+       data_mod$data[, SNP:= RSID]
+       sensitivity_source_mod$data[, SNP:= RSID]
+       harm <- genepi.utils::harmonise(data_mod$data, sensitivity_source_mod$data, gwas1_trait="exposure", gwas2_trait="outcome", merge = c("RSID"="RSID"))
+       harm <- harm[keep==TRUE, ]
+       if("group_exposure" %in% names(harm)) {
+         data.table::setnames(harm, "group_exposure", "group")
+       }
+
+       # plot
+       p <- ggplot(data    = harm[!is.na(group), ],
+                   mapping = aes(x=BETA_exposure, y=BETA_outcome, color=group)) + #alpha=P_exposure
+         geom_point() +
+         # scale_alpha_discrete(name="Exposure P-value") +
+         geom_smooth(method="lm", mapping = aes(weight = (1/SE_exposure)*(1/SE_outcome)), color="red") +
+         geom_point(data = harm[which(harm$index==TRUE), ], mapping = aes(x=BETA_exposure, y=BETA_outcome), size=3, fill="red", color="red", shape=24) +
+         # theme_classic() +
+         labs(x = expression('\u03B2'[exposure]),
+              y = expression('\u03B2'[outcome]),
+              color = "Group") +
+         facet_wrap(~group, nrow=4, scales = "free")
+
+     # Kriging plot for LD reference vs study fit
+     } else if(input$sensitivity_plot == "Kriging plot") {
+
+       validate(
+         need(!is.null(data_mod$kriging_rss), 'No Kriging plot data - run finemapping'),
+       )
+
+       p <- ggplot(data    = data_mod$kriging_rss,
+                   mapping = aes(x=condmean, y=z)) +
+         geom_abline(intercept = 0, slope = 1) +
+         geom_point(mapping = aes(color=outlier)) +
+         geom_label_repel(data = data_mod$kriging_rss[data_mod$kriging_rss$outlier==TRUE, ],
+                          mapping = aes(label=RSID), max.overlaps = Inf) +
+         scale_color_manual(values = c("TRUE"="red", "FALSE"="darkgrey"), labels=c("TRUE"="Outlier","FALSE"="Within tolerance"), drop=FALSE) +
+         theme_classic() +
+         labs(y = "Observed z scores", x = "Expected value") +
+         theme(legend.position = "top",
+               legend.title = element_blank())
+
+     }
+
+      # return
+      return(p)
     })
 
 

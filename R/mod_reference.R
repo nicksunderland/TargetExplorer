@@ -18,7 +18,7 @@ mod_reference_ui <- function(id){
 
 #' reference Server Functions
 #' @noRd
-mod_reference_server <- function(id, label="Reference", gene_module){
+mod_reference_server <- function(id, gene_module, label="Reference", enabled=TRUE, include=NULL, exclude=NULL){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     cli::cli_alert_info(paste0("initialising mod_reference_server(ns=",ns("foo"),")"))
@@ -29,6 +29,12 @@ mod_reference_server <- function(id, label="Reference", gene_module){
     ref_dir        <- get_data_directory(type="references")
     available_refs <- list.files(ref_dir, recursive = FALSE, full.names = TRUE)
     names(available_refs) <- basename(available_refs)
+    if(!is.null(exclude)) {
+      available_refs <- available_refs[!grepl(paste0(exclude,collapse="|"), available_refs)]
+    }
+    if(!is.null(include)) {
+      available_refs <- available_refs[grepl(paste0(include,collapse="|"), available_refs)]
+    }
 
 
     #==========================================
@@ -41,9 +47,14 @@ mod_reference_server <- function(id, label="Reference", gene_module){
     # reference selector UI component - # TODO - implement filtering of available reference depending on build type in `gene_module`
     #==========================================
     output$reference_ui <- renderUI({
-      selectInput(inputId = ns("reference"),
-                  label   = label,
-                  choices = c("off", names(available_refs)))
+      s <- selectInput(inputId = ns("reference"),
+                       label   = label,
+                       choices = c(names(available_refs)))
+      if(enabled) {
+        return(s)
+      } else {
+        return(shinyjs::disabled(s))
+      }
     })
 
 
@@ -52,16 +63,7 @@ mod_reference_server <- function(id, label="Reference", gene_module){
     #==========================================
     session$userData[[ns("reference")]] <- observeEvent(input$reference, {
 
-      if(input$reference != "off") {
-
-        # e.g. /.../TargetExplorerData/inst/extdata/references/EUR_1kGv3/EUR_1kGv3
-        v$ref_path <- file.path(available_refs[[input$reference]], input$reference)
-
-      } else {
-
-        v$ref_path <- NULL
-
-      }
+      v$ref_path <- available_refs[[input$reference]]
 
     })
 
@@ -78,12 +80,14 @@ mod_reference_server <- function(id, label="Reference", gene_module){
 make_ref_subset <- function(ref_path, chrom, from, to) {
 
   # create file name for the reference subset
-  cache_path <- file.path(dirname(ref_path), "cache")
+  cache_path <- file.path(ref_path, "cache")
   out <- file.path(cache_path, paste0(basename(ref_path),"_chr",chrom,"_",from,"_",to))
 
   # see if it already exists, if so return it
   if(paste0(out,".pgen") %in% list.files(cache_path, full.names=TRUE)) {
     return(out)
+  } else {
+    ref_path <- file.path(ref_path, basename(ref_path))
   }
 
   # else, create a subset of the reference file
@@ -108,3 +112,6 @@ make_ref_subset <- function(ref_path, chrom, from, to) {
     return(out)
   }
 }
+
+
+
