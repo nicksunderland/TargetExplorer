@@ -56,7 +56,7 @@ parse_data_source_choices <- function(id) {
 
   # Return the data sources relevant to the module
   choices <- switch(parent_id_type,
-                    "GWAS"  = c("Local","IEU Open GWAS","EBI GWAS Catalogue"),
+                    "GWAS"  = c("Local","IEU Open GWAS","EBI GWAS Catalogue","EBI eQTL Catalogue"),
                     "eQTL"  = c("EBI eQTL Catalogue"),
                     "Coloc" = c("EBI eQTL Catalogue"))
 }

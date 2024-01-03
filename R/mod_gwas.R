@@ -64,17 +64,27 @@ mod_gwas_server <- function(id, app){
     #==========================================
     # Observe the grouping input
     #==========================================
-    observeEvent(grouping_mod$grouping, {
+    observeEvent(list(grouping_mod$grouping, data_mod$source), {
+
+      req(grouping_mod$grouping)
+      req(data_mod$source)
+
+      source_specific_plots <- switch(data_mod$source,
+                                      "Local"              = c(),
+                                      "IEU Open GWAS"      = c(),
+                                      "EBI GWAS Catalogue" = c(),
+                                      "EBI eQTL Catalogue" = c("Tissue - variation","Tissue - expression","Tissue - clusters"))
 
       sensitivity_plot_choices <- switch(grouping_mod$grouping,
-                                         "Off"          = c("Off"),
-                                         "plink::clump" = c("Off", "LD structure", "Clump exp-out corr"),
-                                         "r-coloc"      = c("Off", "LD structure", "Kriging plot"),
-                                         "r-susieR"     = c("Off", "LD structure", "Kriging plot"))
+                                         "Off"          = c("Off", source_specific_plots),
+                                         "plink::clump" = c("Off", "LD structure", "Clump exp-out corr", source_specific_plots),
+                                         "r-coloc"      = c("Off", "LD structure", "Kriging plot", source_specific_plots),
+                                         "r-susieR"     = c("Off", "LD structure", "Kriging plot", source_specific_plots))
 
       updateSelectInput(inputId = "sensitivity_plot", choices = sensitivity_plot_choices)
 
     })
+
 
     #==========================================
     # Observe the sensitivity input
@@ -83,28 +93,14 @@ mod_gwas_server <- function(id, app){
 
       if(is.null(input$sensitivity_plot) || input$sensitivity_plot == "Off") {
 
-        plot_area <- column(12,
-                            plotOutput(outputId = ns("locus_plot"),
-                                       height   = "550px",
-                                       brush    = ns("locus_plot_brush"))
-                            )
-        return(plot_area)
+        plot_area <- column(12, plotOutput(outputId=ns("locus_plot"), height="550px", brush=ns("locus_plot_brush")))
 
       } else {
 
-        plot_area <- fluidRow(
-          column(8,
-                 plotOutput(outputId = ns("locus_plot"),
-                            height   = "550px",
-                            brush    = ns("locus_plot_brush"))),
-          column(4,
-                 plotOutput(outputId = ns("sensitivity_plot"),
-                            height   = "550px"))
-        )
-        return(plot_area)
-
+        plot_area <- fluidRow(column(6, plotOutput(outputId=ns("locus_plot"), height="550px", brush=ns("locus_plot_brush"))),
+                              column(6, plotOutput(outputId=ns("sensitivity_plot"), height="550px")))
       }
-
+      return(plot_area)
     })
 
 
@@ -122,7 +118,6 @@ mod_gwas_server <- function(id, app){
       p <- ggplot(data    = data_mod$data,
                   mapping = aes(x=BP, y=nlog10P)) +
         geom_hline(yintercept=7.3, linetype="dotted", color="lightgrey") +
-        geom_point(color="lightgray") +
         annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05) +
         theme_classic() +
         lims(x = c(app$modules$gene$start - app$modules$gene$flanks_kb*1000, app$modules$gene$end + app$modules$gene$flanks_kb*1000),
@@ -130,6 +125,28 @@ mod_gwas_server <- function(id, app){
         labs(x        = paste0("Chromosome ", app$modules$gene$chr, " position"),
              y        = expression(paste("-log"[10], plain(P))),
              subtitle = data_mod$source_id)
+
+      # if alternative color/group data (and no grouping column from the group module), plot that color
+      possible_base_grouping <- list(eqtl = c("STUDY","TISSUE","QUANT_METHOD"))
+      if(!all(c("index","group") %in% names(data_mod$data)) &&
+         any(sapply(possible_base_grouping, function(cols) all(cols %in% names(data_mod$data))))) {
+
+        # must have been imported from eQTL catalogue
+        if(all(possible_base_grouping[["eqtl"]] %in% names(data_mod$data))) {
+
+          p <- p +
+            ggplot2::geom_point(aes(color=TISSUE, shape=QUANT_METHOD)) +
+            labs(color  = "Tissue",
+                 shape = "Quantification")
+
+        }
+
+      # else just color grey
+      } else {
+
+        p <- p + geom_point(color="lightgray")
+
+      }
 
       # if gene data then add
       if(!is.null(data_mod$data2)) {
@@ -151,7 +168,7 @@ mod_gwas_server <- function(id, app){
                           direction = "x", min.segment.length = 0.25)
       }
 
-      # if there is clumped data, plot
+      # if there is grouped (clumped or finemapped) data, plot
       if(all(c("index","group") %in% colnames(data_mod$data))) {
         p <- p +
           geom_point(data = data_mod$data[!is.na(data_mod$data$group), ],            mapping = aes(x=BP, y=nlog10P, color=group, fill=group), shape=23) +
@@ -198,6 +215,8 @@ mod_gwas_server <- function(id, app){
         need(!is.null(data_mod$data), 'No GWAS data loaded')
       )
 
+
+      #--------------------------------------------
       # LD structure plots
       if(input$sensitivity_plot == "LD structure") {
 
@@ -257,6 +276,7 @@ mod_gwas_server <- function(id, app){
         p <- ggpubr::ggarrange(plotlist = list(p_r2, p_r), ncol = 1)
 
 
+     #--------------------------------------------
      # Clumping exposure-outcome correlation plots
      } else if(input$sensitivity_plot == "Clump exp-out corr") {
 
@@ -282,11 +302,13 @@ mod_gwas_server <- function(id, app){
          geom_smooth(method="lm", mapping = aes(weight = (1/SE_exposure)*(1/SE_outcome)), color="red") +
          geom_point(data = harm[which(harm$index==TRUE), ], mapping = aes(x=BETA_exposure, y=BETA_outcome), size=3, fill="red", color="red", shape=24) +
          # theme_classic() +
-         labs(x = expression('\u03B2'[exposure]),
-              y = expression('\u03B2'[outcome]),
+         labs(x = '\u03B2 - exposure',
+              y = '\u03B2 - outcome',
               color = "Group") +
          facet_wrap(~group, nrow=4, scales = "free")
 
+
+     #--------------------------------------------
      # Kriging plot for LD reference vs study fit
      } else if(input$sensitivity_plot == "Kriging plot") {
 
@@ -306,7 +328,71 @@ mod_gwas_server <- function(id, app){
          theme(legend.position = "top",
                legend.title = element_blank())
 
+
+     #--------------------------------------------
+     # Tissue variation (betas of different tissues) plot - for eQTL data
+     } else if(input$sensitivity_plot == "Tissue - variation") {
+
+       # order by beta for nicer plotting
+       data.table::setorder(data_mod$data, BETA)
+       data_mod$data[, RSID_beta := factor(RSID, levels=unique(data_mod$data$RSID))]
+
+       # plot
+       p <- ggplot(data    = data_mod$data,
+                   mapping = aes(x = RSID_beta, y = STUDY, fill=BETA)) +
+         geom_tile() +
+         scale_fill_gradient2(low="red",mid="black",high="green", limits=c(-0.5,0.5), oob=scales::squish) +
+         theme(axis.text.x = element_blank()) +
+         labs(x = "RSID", y = "Dataset (study)", fill="\u03B2") +
+         facet_grid(rows = vars(TISSUE), cols = vars(QUANT_METHOD))
+
+
+     #--------------------------------------------
+     # Tissue expression (TPM of different tissues) plot - for eQTL data
+     } else if(input$sensitivity_plot == "Tissue - expression") {
+
+       # order by transcripts per million (nicer plotting)
+       data.table::setorder(data_mod$data, TPM)
+       data_mod$data[, TISSUE := factor(TISSUE, levels=unique(data_mod$data$TISSUE))]
+
+       # plot
+       p <- ggplot(data    = data_mod$data,
+                   mapping = aes(x = TISSUE, y = STUDY, fill=TPM)) +
+         geom_tile() +
+         viridis::scale_fill_viridis(option="inferno", direction=1) +
+         labs(x = "Tissue", y = "Study", fill="TPM")
+
+
+     #--------------------------------------------
+     # Tissue expression (TPM of different tissues) plot - for eQTL data
+     } else if(input$sensitivity_plot == "Tissue - clusters") {
+
+       validate(
+         need(nrow(unique(data_mod$data[, list(STUDY,TISSUE)]))>1, '>1 dataset required for PCA cluster analysis'),
+       )
+
+       # Calculate PCA / clustering datatable
+       beta_matrix <- data_mod$data[QUANT_METHOD=="ge" & grepl("^rs[0-9]+$",RSID), list(RSID, DATASET=paste(STUDY,"-",TISSUE), BETA)]
+       beta_matrix <- beta_matrix[, .SD[which.max(BETA)], by=c("RSID","DATASET")] # a few duplicates in a dataset, remove
+       beta_matrix <- tidyr::complete(beta_matrix, RSID, DATASET) |> data.table::as.data.table()
+       beta_matrix <- data.table::dcast(beta_matrix, RSID ~ DATASET, value.var="BETA")
+       beta_matrix <- stats::na.omit(beta_matrix)
+       t_beta_matrix <- data.table::as.data.table( t(beta_matrix[,-1]) )
+       data.table::setnames(t_beta_matrix, names(t_beta_matrix), beta_matrix$RSID)
+       t_beta_matrix[, DATASET := names(beta_matrix)[-1]]
+       data.table::setcolorder(t_beta_matrix, "DATASET")
+
+       # run PCA
+       pca <- stats::prcomp(t_beta_matrix[,-1], center=TRUE, scale=TRUE)
+
+       # plot
+       p <- autoplot(pca, data=t_beta_matrix, color='DATASET') +
+         geom_point(aes(color=DATASET), size=5) +
+         theme_classic() +
+         labs(color="Dataset")
+
      }
+
 
       # return
       return(p)

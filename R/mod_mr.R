@@ -27,32 +27,40 @@ mod_mr_ui <- function(id){
                                ),
                                hr(),
                                fluidRow(
-                                 column(6, prettyCheckboxGroup(inputId = ns("mr_method"),
-                                                               label   = "MR method",
-                                                               choices = c("mr_wald_ratio","mr_egger_regression","mr_weighted_median",
-                                                                            "mr_ivw","mr_simple_mode", "mr_weighted_mode"),
-                                                               selected= c("mr_wald_ratio", "mr_egger_regression", "mr_weighted_median",
-                                                                            "mr_ivw", "mr_simple_mode", "mr_weighted_mode"),
-                                                               shape   = "curve",
-                                                               inline  = FALSE)),
                                  column(6,
-                                        prettyCheckboxGroup(inputId = ns("mr_analysis"),
-                                                            label   = "Sensitivity",
-                                                            choices = c("mr_singlesnp","mr_leaveoneout"),
-                                                            selected= c("mr_singlesnp","mr_leaveoneout"),
-                                                            shape   = "curve",
-                                                            inline  = FALSE),
-                                        actionButton(inputId = ns("run_mr"),
-                                                     label   = "Run MR"),
-                                        hr(),
+                                        checkboxGroupInput(inputId = ns("mr_method"),
+                                                           label   = "MR method",
+                                                           choices = c("mr_wald_ratio","mr_egger_regression","mr_weighted_median",
+                                                                        "mr_ivw","mr_simple_mode", "mr_weighted_mode"),
+                                                           selected= c("mr_wald_ratio", "mr_egger_regression", "mr_weighted_median",
+                                                                        "mr_ivw", "mr_simple_mode", "mr_weighted_mode"),
+                                                           inline  = FALSE)),
+                                 column(6,
                                         selectInput(inputId = ns("sens_plot_select"),
-                                                    label   = "Plot",
-                                                    choices = c("mr_singlesnp","mr_leaveoneout")),
-                                        prettyCheckbox(inputId = ns("point_labels"),
-                                                       value   = TRUE,
-                                                       label   = "Labels",
-                                                       shape   = "curve")
-                                        )
+                                                    label   = "Sensitivity plot",
+                                                    choices = c("Single SNP","Leave-one-out"),
+                                                    selected= "Single SNP"),
+                                        checkboxInput(inputId = ns("point_labels"),
+                                                      value   = TRUE,
+                                                      label   = "Labels"),
+                                        textInput(inputId = ns("exclude"),
+                                                  label   = "Exclude",
+                                                  value   = "",
+                                                  placeholder = "e.g. rs1234; rs4321"))
+                               ),
+                               fluidRow(
+                                 column(6,
+                                        mod_reference_ui(id=ns("reference"))),
+                                 column(3,
+                                        prettyRadioButtons(inputId  = ns("mr_corr"),
+                                                           label    = "MR-corr",
+                                                           choices  = c("Corr", "Indep"),
+                                                           selected = "Indep",
+                                                           inline   = FALSE)),
+                                 column(3,
+                                        actionButton(inputId = ns("run_mr"),
+                                                     label   = "Run MR")),
+                                 tags$style(type='text/css', paste0("#",ns("run_mr")," { width:100%; margin-top: 25px;}"))
                                ),
                   ), # sidebar panel end
                   mainPanel(width = 9,
@@ -94,10 +102,11 @@ mod_mr_server <- function(id, app){
     #==========================================
     # Data module server for the MR module
     #==========================================
-    data_mod     <- mod_data_server(id="data", gene_module=app$modules$gene)
-    remove_mod   <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
-    exposure_mod <- mod_source_select_server(id="exposure", app=app, source_type=c("GWAS","eQTL","Coloc"), label="Exposure")
-    outcome_mod  <- mod_source_select_server(id="outcome",  app=app, source_type=c("GWAS","eQTL","Coloc"), label="Outcome")
+    data_mod      <- mod_data_server(id="data", gene_module=app$modules$gene)
+    remove_mod    <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
+    exposure_mod  <- mod_source_select_server(id="exposure", app=app, source_type=c("GWAS","eQTL","Coloc"), label="Exposure")
+    outcome_mod   <- mod_source_select_server(id="outcome",  app=app, source_type=c("GWAS","eQTL","Coloc"), label="Outcome")
+    reference_mod <- mod_reference_server(id="reference", label="Reference", gene_module=gene_module, enabled=FALSE)
     exposure_filter_mod <- mod_source_select_server(id="exposure_filter_by", app=app, source_type=c("GWAS","eQTL","Coloc"), label="filter by:")
     outcome_filter_mod  <- mod_source_select_server(id="outcome_filter_by",  app=app, source_type=c("GWAS","eQTL","Coloc"), label="filter by:")
 
@@ -169,9 +178,22 @@ mod_mr_server <- function(id, app){
           return(NULL)
         }
 
+        # custom variants to exlcude
+        exclude_variants <- c("")
+        if(!is.null(input$exclude) && input$exclude != "") {
+
+          exclude_variants <- trimws(strsplit(input$exclude,";",fixed=TRUE)[[1]])
+
+          if(!any(exclude_variants %in% exposure_mod$data$RSID)) {
+
+            showNotification("Provided variants were not found in the dataset - recheck input, n.b. must be ';' separated", type="error")
+
+          }
+        }
+
         # exposure data
         shiny::incProgress(1/n, detail = "Formatting exposure")
-        exp <- TwoSampleMR::format_data(dat = exposure_mod$data[RSID %in% variants_source_1, ] |> as.data.frame(),
+        exp <- TwoSampleMR::format_data(dat = exposure_mod$data[RSID %in% variants_source_1 & !RSID %in% exclude_variants, ] |> as.data.frame(),
                                         type = "exposure",
                                         snp_col = "RSID",
                                         beta_col = "BETA",
@@ -205,26 +227,74 @@ mod_mr_server <- function(id, app){
                                         chr_col = "CHR",
                                         pos_col = "BP")
 
+        # Harmonise
         shiny::incProgress(1/n, detail = "Harmonising")
         data_mod$data  <- TwoSampleMR::harmonise_data(exp,out)
+        data_mod$data  <- data_mod$data[data_mod$data$mr_keep==TRUE, ]
 
+        #-----------------------------------------------
+        # Run MR - with independent variables
         shiny::incProgress(1/n, detail = "MR analysis")
-        data_mod$data2 <- TwoSampleMR::mr(data_mod$data)
+        if(input$mr_corr == "Indep") {
+
+          data_mod$data2 <- TwoSampleMR::mr(data_mod$data)
 
 
-        # sensitivity if requested
-        if("mr_singlesnp" %in% input$mr_analysis) {
+        #-----------------------------------------------
+        # Run MR - with correlated variables
+        } else if(input$mr_corr == "Corr") {
 
-          shiny::incProgress(1/n, detail = "Single SNP analysis")
-          res_single <- TwoSampleMR::mr_singlesnp(data_mod$data)
-          data_mod$plot_single <- TwoSampleMR::mr_forest_plot(res_single)
+          # get the reference file
+          if(grepl("1kGv3", reference_mod$ref_path)) {
 
-        }
-        if("mr_leaveoneout" %in% input$mr_analysis) {
+            plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
+                                         chrom    = app$modules$gene$chr,
+                                         from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                         to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
+            plink2   <- get_plink2_exe()
+            ukbb_ref <- NULL
 
-          shiny::incProgress(1/n, detail = "Leave-one-out SNP analysis")
-          res_loo <- TwoSampleMR::mr_leaveoneout(data_mod$data)
-          data_mod$plot_loo <- TwoSampleMR::mr_leaveoneout_plot(res_loo)
+          } else if(grepl("UKB_LD", reference_mod$ref_path)) {
+
+            # get the UKBB LD file path (downloads if not in cache)
+            ukbb_ref_dt <- genepi.utils::download_ukbb_ld(chr           = app$modules$gene$chr,
+                                                          bp_start      = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                                          bp_end        = app$modules$gene$end + app$modules$gene$flanks_kb*1000,
+                                                          ukbb_ld_cache = file.path(reference_mod$ref_path, "cache"))
+            ukbb_ref  <- ukbb_ref_dt$root_file
+            plink_ref <- NULL
+            plink2    <- NULL
+          }
+
+          # create the LD matrix for the region variants
+          dat_ld_obj <- genepi.utils::ld_matrix(dat       = data_mod$data,
+                                                colmap    = list(RSID = "SNP",
+                                                                 EA   = c("effect_allele.exposure","effect_allele.outcome"),
+                                                                 OA   = c("other_allele.exposure","other_allele.outcome"),
+                                                                 EAF  = c("eaf.exposure","eaf.outcome"),
+                                                                 BETA = c("beta.exposure","beta.outcome")),
+                                                method    = "r",
+                                                plink2    = plink2,
+                                                plink_ref = plink_ref,
+                                                ukbb_ref  = ukbb_ref)
+
+          # MRInput object
+          data_mod$data <- MendelianRandomization::mr_input(
+            bx            = dat_ld_obj$dat$beta.exposure,
+            bxse          = dat_ld_obj$dat$se.exposure,
+            by            = dat_ld_obj$dat$beta.outcome,
+            byse          = dat_ld_obj$dat$se.outcome,
+            exposure      = dat_ld_obj$dat$exposure[1],
+            outcome       = dat_ld_obj$dat$outcome[1],
+            snps          = dat_ld_obj$dat$SNP,
+            effect_allele = dat_ld_obj$dat$effect_allele.exposure,
+            other_allele  = dat_ld_obj$dat$other_allele.exposure,
+            eaf           = dat_ld_obj$dat$eaf.exposure,
+            correlation   = dat_ld_obj$ld_mat
+          )
+
+          # Run all MR methods
+          data_mod$data2 <- MendelianRandomization::mr_allmethods(data_mod$data)
 
         }
 
@@ -247,16 +317,36 @@ mod_mr_server <- function(id, app){
         need(!is.null(data_mod$data) && !is.null(data_mod$data2), paste0('No MR data found, have you clicked `Run MR`?'))
       )
 
-      # create the MR plot
-      p   <- TwoSampleMR::mr_scatter_plot(data_mod$data2, data_mod$data)[[1]] +
-        theme_classic() +
-        theme(legend.position="top")
+      # create the MR plot - from MendelianRandmonisation package
+      if(inherits(data_mod$data2, "MRAll")) {
 
-      # plot labels
-      if(input$point_labels) {
-        p <- p +
-          geom_label_repel(mapping = aes(label = SNP, x = beta.exposure, y = beta.outcome), color="black", show.legend = FALSE)
+        p <- MendelianRandomization::mr_plot(data_mod$data2,
+                                             orientate = TRUE,
+                                             error = TRUE) +
+          theme_classic() +
+          theme(legend.position="top")
+
+        # plot labels
+        if(input$point_labels) {
+          p <- p +
+            geom_label_repel(data=data.frame(snps=data_mod$data2@Data@snps), aes(label=snps))
+        }
+
+      # data from TwoSampleMR package
+      } else {
+
+        p   <- TwoSampleMR::mr_scatter_plot(data_mod$data2, data_mod$data)[[1]] +
+          theme_classic() +
+          theme(legend.position="top")
+
+        # plot labels
+        if(input$point_labels) {
+          p <- p +
+            geom_label_repel(mapping = aes(label = SNP, x = beta.exposure, y = beta.outcome), color="black", show.legend = FALSE)
+        }
+
       }
+
 
       # return plot
       return(p)
@@ -289,11 +379,21 @@ mod_mr_server <- function(id, app){
         need(!is.null(data_mod$data2), "")
       )
 
-      # clean up the results table
-      res <- data_mod$data2
-      res$pval <- formatC(res$pval, digits = 3)
-      res$id.exposure <- NULL
-      res$id.outcome  <- NULL
+      # from MendelianRandmonisation package
+      if(inherits(data_mod$data2, "MRAll")) {
+
+        res <- data_mod$data2@Values
+
+      # data from TwoSampleMR package
+      } else {
+
+        # clean up the results table
+        res <- data_mod$data2
+        res$pval <- formatC(res$pval, digits = 3)
+        res$id.exposure <- NULL
+        res$id.outcome  <- NULL
+
+      }
 
       return(res)
     })
@@ -309,13 +409,22 @@ mod_mr_server <- function(id, app){
         need(!is.null(data_mod$data), "")
       )
 
-      # run analysis
-      egg <- TwoSampleMR::mr_pleiotropy_test(data_mod$data)
-      if(!is.na(egg$pval)) {
-        egg$pval <- formatC(egg$pval, digits = 3)
+      # run analysis - from MendelianRandmonisation package
+      if(inherits(data_mod$data2, "MRAll")) {
+
+        egg <- NULL # result lives in the main table
+
+      # data from TwoSampleMR package
+      } else {
+
+        egg <- TwoSampleMR::mr_pleiotropy_test(data_mod$data)
+        if(!is.na(egg$pval)) {
+          egg$pval <- formatC(egg$pval, digits = 3)
+        }
+        egg$id.exposure <- NULL
+        egg$id.outcome  <- NULL
+
       }
-      egg$id.exposure <- NULL
-      egg$id.outcome  <- NULL
 
       return(egg)
     })
@@ -327,25 +436,63 @@ mod_mr_server <- function(id, app){
     #==========================================
     output$sens_plot <- renderPlot({
 
-      if(input$sens_plot_select=="mr_singlesnp") {
+      # check data
+      validate(
+        need(!is.null(data_mod$data), paste0('No MR data found'))
+      )
 
-        # check data
-        validate(
-          need(!is.null(data_mod$plot_single), paste0('No single SNP analysis data'))
-        )
-        return(data_mod$plot_single)
+      # run and plot single SNP analysis
+      if(input$sens_plot_select=="Single SNP") {
 
-      } else if(input$sens_plot_select=="mr_leaveoneout") {
+        # run analysis - from MendelianRandmonisation package
+        if(inherits(data_mod$data2, "MRAll")) {
 
-        # check data
-        validate(
-          need(!is.null(data_mod$plot_loo), paste0('No LOO SNP analysis data'))
-        )
-        return(data_mod$plot_loo)
+          p <- MendelianRandomization::mr_forest(data_mod$data,
+                                                 alpha = 0.05,
+                                                 snp_estimates = TRUE,
+                                                 methods = "ivw",
+                                                 ordered = FALSE)
+
+        # data from TwoSampleMR package
+        } else {
+
+          res_single <- TwoSampleMR::mr_singlesnp(data_mod$data)
+          p <- TwoSampleMR::mr_forest_plot(res_single)
+
+        }
+
+
+      # run and plot LOO SNP analysis
+      } else if(input$sens_plot_select=="Leave-one-out") {
+
+        # run analysis - from MendelianRandmonisation package
+        if(inherits(data_mod$data2, "MRAll")) {
+
+          p <- MendelianRandomization::mr_loo(data_mod$data, alpha = 0.05)
+
+          # data from TwoSampleMR package
+        } else {
+
+          res_loo <- TwoSampleMR::mr_leaveoneout(data_mod$data)
+          p <- TwoSampleMR::mr_leaveoneout_plot(res_loo)
+
+        }
 
       }
 
+      return(p)
     })
+
+
+    #==========================================
+    # observe the correlation selector
+    #==========================================
+    session$userData[[ns("mr_corr")]] <- observeEvent(input$mr_corr, {
+
+      shinyjs::toggleState(id="reference-reference", condition={input$mr_corr=="Corr"})
+
+    })
+
 
 
     #==========================================
