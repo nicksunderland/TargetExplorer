@@ -5,19 +5,15 @@
 #' @param id,input,output,session Internal parameters for {shiny}.
 #'
 #' @noRd
-#' @import shiny shinyWidgets shinyalert
+#' @import shiny shinyWidgets
+#' @importFrom shinyalert shinyalert
 #'
 mod_r_coloc_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_r_coloc_ui(ns=",ns("foo"),")"))
-  useShinyalert()
   tagList(
     fluidRow(
       column(6,
-             selectInput(inputId  = ns("func"),
-                         label    = "Function",
-                         choices  = c("finemap.abf","finemap.signals"),
-                         selected = "finemap.signals")),
+             uiOutput(outputId = ns("function_select"))),
       column(4,
              actionButton(inputId = ns("run"),
                           label   = "Run")),
@@ -29,73 +25,62 @@ mod_r_coloc_ui <- function(id){
       tags$style(type='text/css', paste0("#",ns("run")," { width:100%; margin-top: 25px;}")),
       tags$style(type='text/css', paste0("#",ns("reset")," { width:100%; margin-top: 25px;}")),
     ),
-    fluidRow(
-      column(6,
-             mod_reference_ui(id=ns("reference"))),
-      column(3,
-             prettyRadioButtons(inputId  = ns("source_type"),
-                                label    = "Type",
-                                choices  = c("quant","cc"),
-                                selected = "quant",
-                                inline   = FALSE)),
-      column(3,
-             prettyRadioButtons(inputId  = ns("method"),
-                                label    = "Method",
-                                choices  = c("mask","cond","single"),
-                                selected = "mask",
-                                inline   = FALSE))
-    ),
-    fluidRow(
-      column(3,
-             numericInput(inputId  = ns("l_param"),
-                          label    = "L",
-                          value    = 5,
-                          step     = 1)),
-      column(3,
-             numericInput(inputId  = ns("s_param"),
-                          label    = "S",
-                          value    = NA_real_,
-                          step     = 0.1)),
-      column(3,
-             numericInput(inputId  = ns("n_param"),
-                          label    = "N",
-                          value    = NA_real_,
-                          step     = 1)),
-      column(3,
-             numericInput(inputId = ns("sd_y"),
-                          label = "sdY",
-                          value = NA_real_,
-                          step  = 0.1))
-    ),
-    fluidRow(
-      column(6,
-             sliderTextInput(inputId  = ns("finemap_p1"),
-                             label    = "p1",
-                             choices  = c(5e-8,5e-6,1e-4,0.01,0.05,0.1,0.5,1.0),
-                             selected = 1e-4,
-                             grid     = TRUE)),
-
-      column(6,
-             sliderTextInput(inputId  = ns("coverage"),
-                             label    = "Coverage %",
-                             choices  = c(0.01,0.05,seq(0.1,0.9,0.1),0.95,0.99,1.0),
-                             selected = 0.95,
-                             grid     = TRUE))
-    )
+    uiOutput(outputId = ns("function_controls"))
   ) # tagList end
+
+
+
+  # prettyRadioButtons(inputId  = ns("assumption"),
+  #                    label    = "Assumption",
+  #                    choices  = c("Single","SuSiE"),
+  #                    selected = "Single",
+  #                    inline   = TRUE),
+  # fluidRow(
+  #   column(6,
+  #          sliderTextInput(inputId  = ns("coloc_p1"),
+  #                          label    = "p1",
+  #                          choices  = c(5e-8,1e-6,1e-5,1e-4,1e-3,0.01,0.05,0.1,0.5,1.0),
+  #                          selected = 1e-4,
+  #                          grid     = TRUE),
+  #          sliderTextInput(inputId  = ns("coloc_p12"),
+  #                          label    = "p12",
+  #                          choices  = c(5e-8,1e-6,1e-5,1e-4,1e-3,0.01,0.05,0.1,0.5,1.0),
+  #                          selected = 1e-5,
+  #                          grid     = TRUE)),
+  #   column(6,
+  #          sliderTextInput(inputId  = ns("coloc_p2"),
+  #                          label    = "p2",
+  #                          choices  = c(5e-8,1e-6,1e-5,1e-4,1e-3,0.01,0.05,0.1,0.5,1.0),
+  #                          selected = 1e-4,
+  #                          grid     = TRUE),
+  #          sliderTextInput(inputId  = ns("coloc_h4"),
+  #                          label    = "H4 decision",
+  #                          choices  = seq(0,1,by=0.1),
+  #                          selected = 0.5,
+  #                          grid     = TRUE),
+  #   )
+  # ),
+
+
 }
 
 
 #' r_coloc Server Functions
 #' @noRd
-mod_r_coloc_server <- function(id, gene_module, data_module){
+mod_r_coloc_server <- function(id,
+                               gene_module,
+                               data_module,
+                               data2_module = NULL,
+                               functions    = c("finemap.abf","finemap.signals","coloc.abf","coloc.signals","coloc.susie")) {
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_r_coloc_server(ns=",ns("foo"),")"))
 
-    # R CMD checks
-    # BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
+
+    #==========================================
+    # Reactive values
+    #==========================================
     run_flag <- reactiveVal(FALSE)
+
 
     #==========================================
     # Data, clump, and remove (sub)module servers for the GWAS module
@@ -160,8 +145,9 @@ mod_r_coloc_server <- function(id, gene_module, data_module){
 
           shiny::incProgress(1/4, detail = paste("Processing", input$`filter-dataset`, "..."))
 
+          #--------------------------------------------
           # finemap.abf
-          if(input$func == "finemap.abf") {
+          if(input$function_select == "finemap.abf") {
 
             # create coloc dataset
             D1 <- make_coloc_dataset(dat  = data_module$data,
@@ -170,8 +156,7 @@ mod_r_coloc_server <- function(id, gene_module, data_module){
                                      N    = input$n_param)
 
             # if assuming only one significant variant run coloc::finemap.abf()
-            results <- coloc::finemap.abf(D1,
-                                          p1 = input$finemap_p1)
+            results <- coloc::finemap.abf(dataset = D1, p1 = input$finemap_p1)
 
             # update the data with grouping
             data_module$data <- calc_credible_set(result      = results,
@@ -179,45 +164,20 @@ mod_r_coloc_server <- function(id, gene_module, data_module){
                                                   coverage    = input$coverage,
                                                   result_type = "finemap.abf")
 
-            # store the LD structure of the region
-            data_module$finemap.abf_result <- data.table(RSID = results$snp,
-                                                         BP   = results$position,
-                                                         PP   = results$SNP.PP)
+          #--------------------------------------------
+          # finemap.signals
+          } else if(input$function_select == "finemap.signals") {
 
-          } else if(input$func == "finemap.signals") {
-
-            # get the reference file
-            if(grepl("1kGv3", reference_mod$ref_path)) {
-
-              plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
-                                           chrom    = gene_module$chr,
-                                           from     = gene_module$start - gene_module$flanks_kb*1000,
-                                           to       = gene_module$end + gene_module$flanks_kb*1000)
-
-              dat_ld_obj <- genepi.utils::ld_matrix(dat       = data_module$data,
-                                                    method    = "r",
-                                                    plink2    = get_plink2_exe(),
-                                                    plink_ref = plink_ref,
-                                                    ukbb_ref  = NULL)
-
-            } else if(grepl("UKB_LD", reference_mod$ref_path)) {
-
-              # get the UKBB LD file path (downloads if not in cache)
-              ukbb_ref_dt <- genepi.utils::download_ukbb_ld(chr           = gene_module$chr,
-                                                            bp_start      = gene_module$start - gene_module$flanks_kb*1000,
-                                                            bp_end        = gene_module$end + gene_module$flanks_kb*1000,
-                                                            ukbb_ld_cache = file.path(reference_mod$ref_path, "cache"))
-
-              # create the LD matrix for the region variants
-              dat_ld_obj <- genepi.utils::ld_matrix(dat       = data_module$data,
-                                                    method    = "r",
-                                                    plink2    = get_plink2_exe(),
-                                                    plink_ref = NULL,
-                                                    ukbb_ref  = ukbb_ref_dt$root_file)
-            }
+            # get LD matrix and harmonise data
+            dat_ld_obj <- get_harmonised_ld(dat      = data_module$data,
+                                            ref_path = reference_mod$ref_path,
+                                            chr      = gene_module$chr,
+                                            from     = gene_module$start - gene_module$flanks_kb*1000,
+                                            to       = gene_module$end + gene_module$flanks_kb*1000,
+                                            method   = "r")
 
             # store the r corr matrix
-            data_module$ld_matrix_r  <- dat_ld_obj[["ld_mat"]]
+            data_module$ld_matrix_r <- dat_ld_obj[["ld_mat"]]
 
             # reset the r2 matrix
             data_module$ld_matrix_r2 <- NULL
@@ -252,8 +212,23 @@ mod_r_coloc_server <- function(id, gene_module, data_module){
             data_module$kriging_rss$outlier <- ifelse(data_module$kriging_rss$logLR  > 2 &
                                                       abs(data_module$kriging_rss$z) > 2, TRUE, FALSE)
 
+          #--------------------------------------------
+          # coloc.abf
+          } else if(input$function_select == "coloc.abf") {
 
-          }
+
+          #--------------------------------------------
+          # coloc.signals
+          } else if(input$function_select == "coloc.signals") {
+
+
+          #--------------------------------------------
+          # coloc.susie
+          } else if(input$function_select == "finemap.signals") {
+
+
+          } # end different function type runs
+
 
           # warn if no groups found
           if(all(is.na(data_module$data$group))) {
@@ -268,7 +243,7 @@ mod_r_coloc_server <- function(id, gene_module, data_module){
       },
       error=function(e) {
 
-        showNotification(paste0(input$func, " failed - ", e), type="error", duration = 10)
+        showNotification(paste0(input$function_select, " failed - ", e), type="error", duration = 10)
         return(NULL)
 
       }) # end tryCatch
@@ -292,11 +267,97 @@ mod_r_coloc_server <- function(id, gene_module, data_module){
 
 
     #==========================================
+    # Function select - which functions to allow
+    #==========================================
+    output$function_select <- renderUI({
+
+      selectInput(inputId=ns("function_select"), label="Function", choices=functions, selected=functions[[1]])
+
+    })
+
+
+    #==========================================
+    # Function UI - which functionUI do we need
+    #==========================================
+    output$function_controls <- renderUI({
+
+      req(input$function_select)
+
+      #--------------------------------------------
+      # finemap.abf
+      if(input$function_select == "finemap.abf") {
+
+        controls <- tagList(
+          fluidRow(
+            column(3, prettyRadioButtons(inputId=ns("source_type"), label="Type", choices=c("quant","cc"), selected="quant", inline=FALSE)),
+            column(3, numericInput(inputId=ns("s_param"), label="S",   value=NA_real_, step=0.1)),
+            column(3, numericInput(inputId=ns("sd_y"),    label="sdY", value=NA_real_, step=0.1)),
+            column(3, numericInput(inputId=ns("n_param"), label="N",   value=NA_real_, step=1)),
+          ),
+          fluidRow(
+            column(6, sliderTextInput(inputId=ns("finemap_p1"), label="p1", selected=1e-4, choices=c(5e-8,5e-6,1e-4,0.01,0.05,0.1,0.5,1.0), grid=TRUE)),
+            column(6, sliderTextInput(inputId=ns("coverage"), label="Coverage %", selected=0.95, choices=c(0.01,0.05,seq(0.1,0.9,0.1),0.95,0.99,1.0), grid=TRUE))
+          )
+        ) # end tagList
+
+        #--------------------------------------------
+        # finemap.signals
+      } else if(input$function_select == "finemap.signals") {
+
+        controls <- tagList(
+          fluidRow(
+            column(6, mod_reference_ui(id=ns("reference"))),
+            column(3, prettyRadioButtons(inputId=ns("source_type"), label="Type", choices=c("quant","cc"), selected="quant", inline=FALSE)),
+            column(3, prettyRadioButtons(inputId=ns("method"), label="Method", choices=c("mask","cond","single"), selected="mask", inline=FALSE))
+          ),
+          fluidRow(
+            column(3, numericInput(inputId=ns("l_param"), label="L",   value=5,        step=1)),
+            column(3, numericInput(inputId=ns("s_param"), label="S",   value=NA_real_, step=0.1)),
+            column(3, numericInput(inputId=ns("sd_y"),    label="sdY", value=NA_real_, step=0.1)),
+            column(3, numericInput(inputId=ns("n_param"), label="N",   value=NA_real_, step=1)),
+          ),
+          fluidRow(
+            column(6, sliderTextInput(inputId=ns("finemap_p1"), label="p1", selected=1e-4, choices=c(5e-8,5e-6,1e-4,0.01,0.05,0.1,0.5,1.0), grid=TRUE)),
+            column(6, sliderTextInput(inputId=ns("coverage"), label="Coverage %", selected=0.95, choices=c(0.01,0.05,seq(0.1,0.9,0.1),0.95,0.99,1.0), grid=TRUE))
+          )
+        ) # end tagList
+
+        #--------------------------------------------
+        # coloc.abf
+      } else if(input$function_select == "coloc.abf") {
+
+        controls <- tagList(
+          fluidRow(p("TODO")
+          ))
+
+        #--------------------------------------------
+        # coloc.signals
+      } else if(input$function_select == "coloc.signals") {
+
+        controls <- tagList(
+          fluidRow(p("TODO")
+          ))
+
+        #--------------------------------------------
+        # coloc.susie
+      } else if(input$function_select == "coloc.susie") {
+
+        controls <- tagList(
+          fluidRow(p("TODO")
+          ))
+
+      }
+
+      return(controls)
+    })
+
+
+    #==========================================
     # function / method choice and input control activation
     #==========================================
-    observeEvent(list(input$func, input$source_type, data_module$data, input$method), {
+    observeEvent(list(input$function_select, input$source_type, data_module$data, input$method), {
 
-      req(input$func)
+      req(input$function_select)
       req(input$source_type)
       req(input$method)
 
@@ -339,44 +400,28 @@ mod_r_coloc_server <- function(id, gene_module, data_module){
 
       }
 
-      # function requirements
-      if(input$func == "finemap.abf") {
+      # L param (number of possible hits) active or not
+      if(input$method == "single") {
 
-        # required controls
-        shinyjs::enable("source_type")
-        shinyjs::enable("finemap_p1")
-        shinyjs::enable("coverage")
-        shinyjs::disable("reference-reference")
-        shinyjs::disable("method")
         shinyjs::disable("l_param")
 
-      } else if(input$func == "finemap.signals") {
+      } else {
 
-        # required controls
-        shinyjs::enable("source_type")
-        shinyjs::enable("finemap_p1")
-        shinyjs::enable("coverage")
-        shinyjs::enable("reference-reference")
-        shinyjs::enable("method")
         shinyjs::enable("l_param")
 
-        if(input$method == "single") {
-
-          shinyjs::disable("l_param")
-
-        } else {
-
-          shinyjs::enable("l_param")
-
-        }
-
       }
+
 
     }) # end controls setup
 
 
   })
 }
+
+
+
+############## Helper functions ################
+
 
 
 #' @title Coloc package standard dataset
@@ -498,8 +543,16 @@ make_coloc_dataset <- function(dat, type, sdY=NA_real_, N=NA_real_, S=NA_real_, 
 
 
 
-
-
+#' Title
+#'
+#' @param results .
+#' @param dat_join_to .
+#' @param coverage .
+#' @param result_type .
+#'
+#' @return .
+#' @export
+#'
 calc_credible_set <- function(results, dat_join_to, coverage, result_type="finemap.abf") {
 
   # checks
@@ -595,7 +648,6 @@ calc_credible_set <- function(results, dat_join_to, coverage, result_type="finem
   }
 
 
-
   # join to the provided data
   d <- data.table::copy(dat_join_to) # force memory change to trigger reactives
   d[result, c("index","group") := list(i.index, i.group), on="RSID"]
@@ -631,4 +683,43 @@ sdY.est <- function(vbeta, maf, n) {
   return(sqrt(cf))
 }
 
+
+
+#' Title
+#'
+#' @param dat .
+#' @param ref_path .
+#' @param chr .
+#' @param from .
+#' @param to .
+#' @param method .
+#'
+#' @return .
+#' @export
+#'
+get_harmonised_ld <- function(dat, ref_path, chr, from, to, method) {
+
+  # get the reference file
+  if(grepl("1kGv3", ref_path)) {
+
+    plink_ref <- make_ref_subset(ref_path=ref_path, chrom=chr, from=from, to=to)
+    plink2    <- get_plink2_exe()
+    ukbb_ref  <- NULL
+
+  } else if(grepl("UKB_LD", ref_path)) {
+
+    # get the UKBB LD file path (downloads if not in cache)
+    ukbb_ref_dt <- genepi.utils::download_ukbb_ld(chr=chr, bp_start=from, bp_end=to, ukbb_ld_cache=file.path(ref_path, "cache"))
+    ukbb_ref    <- ukbb_ref_dt$root_file
+    plink_ref   <- NULL
+    plink2      <- NULL
+
+  }
+
+  # get LD matrix and harmonise the data
+  dat_ld_obj <- genepi.utils::ld_matrix(dat=dat, method=method, plink2=plink2, plink_ref=plink_ref, ukbb_ref=ukbb_ref)
+
+  return(dat_ld_obj)
+
+}
 

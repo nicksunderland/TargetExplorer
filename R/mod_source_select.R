@@ -9,7 +9,6 @@
 #'
 mod_source_select_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_source_select_ui(ns=",ns("foo"),")"))
   tagList(
     uiOutput(ns("source_select_ui"))
   )
@@ -21,7 +20,6 @@ mod_source_select_ui <- function(id){
 mod_source_select_server <- function(id, app, source_type=c("GWAS","eQTL","Coloc","MR"), label="Source 1"){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_source_select_server(ns=",ns("foo"),")"))
 
 
     #==========================================

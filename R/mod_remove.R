@@ -12,7 +12,6 @@
 #' @importFrom shiny NS tagList
 mod_remove_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_remove_ui(ns=",ns("foo"),")"))
   tagList(
     actionButton(inputId=ns("remove_module"), width = "40px", label = "", icon = icon("trash-can"))
   )
@@ -24,13 +23,12 @@ mod_remove_ui <- function(id){
 mod_remove_server <- function(id, app, parent_id, parent_inputs){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_remove_server(ns=",ns("foo"),") id=",id))
+
 
     #==========================================
     # observe the remove button
     #==========================================
     observeEvent(input$remove_module, {
-      cli::cli_alert_info("app_server::observeEvent(input$remove_step)")
 
       # remove from the UI
       removeUI(

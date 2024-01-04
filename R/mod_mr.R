@@ -96,8 +96,6 @@ mod_mr_server <- function(id, app){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
-    # R CMD checks
-    beta.exposure <- beta.outcome <- bp <- RSID <- SNP <- NULL
 
     #==========================================
     # Data module server for the MR module
@@ -232,71 +230,85 @@ mod_mr_server <- function(id, app){
         data_mod$data  <- TwoSampleMR::harmonise_data(exp,out)
         data_mod$data  <- data_mod$data[data_mod$data$mr_keep==TRUE, ]
 
-        #-----------------------------------------------
-        # Run MR - with independent variables
-        shiny::incProgress(1/n, detail = "MR analysis")
-        if(input$mr_corr == "Indep") {
 
-          data_mod$data2 <- TwoSampleMR::mr(data_mod$data)
+        # running the external packages may fail
+        tryCatch({
+
+          #-----------------------------------------------
+          # Run MR - with independent variables
+          shiny::incProgress(1/n, detail = "MR analysis")
+          if(input$mr_corr == "Indep") {
+
+            data_mod$data2 <- TwoSampleMR::mr(data_mod$data)
 
 
-        #-----------------------------------------------
-        # Run MR - with correlated variables
-        } else if(input$mr_corr == "Corr") {
+          #-----------------------------------------------
+          # Run MR - with correlated variables
+          } else if(input$mr_corr == "Corr") {
 
-          # get the reference file
-          if(grepl("1kGv3", reference_mod$ref_path)) {
+            # get the reference file
+            if(grepl("1kGv3", reference_mod$ref_path)) {
 
-            plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
-                                         chrom    = app$modules$gene$chr,
-                                         from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-                                         to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
-            plink2   <- get_plink2_exe()
-            ukbb_ref <- NULL
+              plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
+                                           chrom    = app$modules$gene$chr,
+                                           from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                           to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
+              plink2   <- get_plink2_exe()
+              ukbb_ref <- NULL
 
-          } else if(grepl("UKB_LD", reference_mod$ref_path)) {
+            } else if(grepl("UKB_LD", reference_mod$ref_path)) {
 
-            # get the UKBB LD file path (downloads if not in cache)
-            ukbb_ref_dt <- genepi.utils::download_ukbb_ld(chr           = app$modules$gene$chr,
-                                                          bp_start      = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-                                                          bp_end        = app$modules$gene$end + app$modules$gene$flanks_kb*1000,
-                                                          ukbb_ld_cache = file.path(reference_mod$ref_path, "cache"))
-            ukbb_ref  <- ukbb_ref_dt$root_file
-            plink_ref <- NULL
-            plink2    <- NULL
+              # get the UKBB LD file path (downloads if not in cache)
+              ukbb_ref_dt <- genepi.utils::download_ukbb_ld(chr           = app$modules$gene$chr,
+                                                            bp_start      = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
+                                                            bp_end        = app$modules$gene$end + app$modules$gene$flanks_kb*1000,
+                                                            ukbb_ld_cache = file.path(reference_mod$ref_path, "cache"))
+              ukbb_ref  <- ukbb_ref_dt$root_file
+              plink_ref <- NULL
+              plink2    <- NULL
+            }
+
+            # create the LD matrix for the region variants
+            dat_ld_obj <- genepi.utils::ld_matrix(dat       = data_mod$data,
+                                                  colmap    = list(RSID = "SNP",
+                                                                   EA   = c("effect_allele.exposure","effect_allele.outcome"),
+                                                                   OA   = c("other_allele.exposure","other_allele.outcome"),
+                                                                   EAF  = c("eaf.exposure","eaf.outcome"),
+                                                                   BETA = c("beta.exposure","beta.outcome")),
+                                                  method    = "r",
+                                                  plink2    = plink2,
+                                                  plink_ref = plink_ref,
+                                                  ukbb_ref  = ukbb_ref)
+
+            # MRInput object
+            data_mod$data <- MendelianRandomization::mr_input(
+              bx            = dat_ld_obj$dat$beta.exposure,
+              bxse          = dat_ld_obj$dat$se.exposure,
+              by            = dat_ld_obj$dat$beta.outcome,
+              byse          = dat_ld_obj$dat$se.outcome,
+              exposure      = dat_ld_obj$dat$exposure[1],
+              outcome       = dat_ld_obj$dat$outcome[1],
+              snps          = dat_ld_obj$dat$SNP,
+              effect_allele = dat_ld_obj$dat$effect_allele.exposure,
+              other_allele  = dat_ld_obj$dat$other_allele.exposure,
+              eaf           = dat_ld_obj$dat$eaf.exposure,
+              correlation   = dat_ld_obj$ld_mat
+            )
+
+            # Run all MR methods
+            data_mod$data2 <- MendelianRandomization::mr_allmethods(data_mod$data)
+
           }
 
-          # create the LD matrix for the region variants
-          dat_ld_obj <- genepi.utils::ld_matrix(dat       = data_mod$data,
-                                                colmap    = list(RSID = "SNP",
-                                                                 EA   = c("effect_allele.exposure","effect_allele.outcome"),
-                                                                 OA   = c("other_allele.exposure","other_allele.outcome"),
-                                                                 EAF  = c("eaf.exposure","eaf.outcome"),
-                                                                 BETA = c("beta.exposure","beta.outcome")),
-                                                method    = "r",
-                                                plink2    = plink2,
-                                                plink_ref = plink_ref,
-                                                ukbb_ref  = ukbb_ref)
+        },
+        error=function(e) {
 
-          # MRInput object
-          data_mod$data <- MendelianRandomization::mr_input(
-            bx            = dat_ld_obj$dat$beta.exposure,
-            bxse          = dat_ld_obj$dat$se.exposure,
-            by            = dat_ld_obj$dat$beta.outcome,
-            byse          = dat_ld_obj$dat$se.outcome,
-            exposure      = dat_ld_obj$dat$exposure[1],
-            outcome       = dat_ld_obj$dat$outcome[1],
-            snps          = dat_ld_obj$dat$SNP,
-            effect_allele = dat_ld_obj$dat$effect_allele.exposure,
-            other_allele  = dat_ld_obj$dat$other_allele.exposure,
-            eaf           = dat_ld_obj$dat$eaf.exposure,
-            correlation   = dat_ld_obj$ld_mat
-          )
+          data_mod$data  <- NULL
+          data_mod$data2 <- NULL
+          showNotification(paste0("Run MR failed: ", e), type="error")
+          return(NULL)
 
-          # Run all MR methods
-          data_mod$data2 <- MendelianRandomization::mr_allmethods(data_mod$data)
-
-        }
+        }) # end tryCatch
 
         shiny::incProgress(1/n, detail = "Complete")
       }) # end progressBar
@@ -318,6 +330,7 @@ mod_mr_server <- function(id, app){
       )
 
       # create the MR plot - from MendelianRandmonisation package
+      browser() # why error here
       if(inherits(data_mod$data2, "MRAll")) {
 
         p <- MendelianRandomization::mr_plot(data_mod$data2,
@@ -410,7 +423,7 @@ mod_mr_server <- function(id, app){
       )
 
       # run analysis - from MendelianRandmonisation package
-      if(inherits(data_mod$data2, "MRAll")) {
+      if(inherits(data_mod$data, "MRAll")) {
 
         egg <- NULL # result lives in the main table
 

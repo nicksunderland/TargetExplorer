@@ -6,7 +6,6 @@ Description: An Rshiny interface to explore genetically proxied drug targets, wi
 License: MIT + file LICENSE
 Imports: 
     cachem,
-    cli,
     coloc,
     config (>= 0.3.2),
     data.table,

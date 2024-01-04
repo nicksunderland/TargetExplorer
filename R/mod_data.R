@@ -9,7 +9,6 @@
 #' @importFrom shiny NS tagList
 mod_data_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_data_ui(ns=",ns("foo"),")"))
   tagList(
     fluidRow(
       column(6,
@@ -68,7 +67,7 @@ parse_data_source_choices <- function(id) {
 mod_data_server <- function(id, gene_module){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_data_server(ns=",ns("foo"),")"))
+
 
     #==========================================
     # imported dataset info tables and datasets
@@ -86,7 +85,6 @@ mod_data_server <- function(id, gene_module){
     # observe the data source select input
     #==========================================
     session$userData[[ns("data_source")]] <- observeEvent(input$data_source, {
-      cli::cli_alert_info(paste0("mod_data_server::observeEvent(input$data_source)"))
 
       # deal with other types of data input; v$source check is to prevent repeated calls
       if (input$data_source=="EBI eQTL Catalogue" && v$source!="EBI eQTL Catalogue") {
@@ -137,7 +135,6 @@ mod_data_server <- function(id, gene_module){
     # study information filtering module
     #==========================================
     output$source_selector <- renderUI({
-      cli::cli_alert_info(paste0("mod_data_server::output$source_selector <- renderUI"))
 
       # TODO: fix the bug that removing and readding modules breaks auto source_selector UIoutput
       req(input$data_source)

@@ -9,7 +9,6 @@
 #'
 mod_gwas_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_gwas_ui(ns=",ns("foo"),")"))
   # need to wrap in div and give an id in order to remove (https://www.youtube.com/watch?app=desktop&v=W7ES6QYvN_c)
   div(
     id = id,
@@ -46,10 +45,6 @@ mod_gwas_ui <- function(id){
 mod_gwas_server <- function(id, app){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_gwas_server(ns=",ns("foo"),")"))
-
-    # R CMD checks
-    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- group <- log10P <- SNP <- index <- nlog10P <- NULL
 
 
     #==========================================

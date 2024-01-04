@@ -9,7 +9,6 @@
 #'
 mod_reference_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_reference_ui(ns=",ns("foo"),")"))
   tagList(
     uiOutput(ns("reference_ui"))
   )
@@ -21,7 +20,7 @@ mod_reference_ui <- function(id){
 mod_reference_server <- function(id, gene_module, label="Reference", enabled=TRUE, include=NULL, exclude=NULL){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_reference_server(ns=",ns("foo"),")"))
+
 
     #==========================================
     # get the available genome references

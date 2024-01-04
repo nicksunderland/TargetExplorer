@@ -16,14 +16,12 @@ app_server <- function(input, output, session) {
   # the types of module that can be added
   module_options <- list(
     'GWAS'  = list(svr='mod_gwas_server',  ui='mod_gwas_ui',  id_idx=0),
-    'eQTL'  = list(svr='mod_eqtl_server',  ui='mod_eqtl_ui',  id_idx=0),
     'Coloc' = list(svr='mod_coloc_server', ui='mod_coloc_ui', id_idx=0),
     'MR'    = list(svr='mod_mr_server',    ui='mod_mr_ui',    id_idx=0)
   )
 
   # observe the add step button
   observeEvent(input$add_step, {
-    cli::cli_alert_info("app_server::observeEvent(input$add_step)")
 
     # generate a unique id for the module e.g. 'GWAS_0'
     id <- paste0(input$module_type,"_",module_options[[input$module_type]][['id_idx']])

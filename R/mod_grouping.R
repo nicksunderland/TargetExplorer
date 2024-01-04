@@ -9,7 +9,6 @@
 #'
 mod_grouping_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_grouping_ui(ns=",ns("foo"),")"))
   tagList(
     fluidRow(
       column(3, p(strong("Grouping:"), style="text-align:right; margin-top: 6px;")),
@@ -29,10 +28,6 @@ mod_grouping_ui <- function(id){
 mod_grouping_server <- function(id, gene_module, data_module){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_grouping_server(ns=",ns("foo"),")"))
-
-    # R CMD checks
-    BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL
 
 
     #==========================================
@@ -76,7 +71,7 @@ mod_grouping_server <- function(id, gene_module, data_module){
       } else if(input$grouping == "r-coloc") {
 
         controls <- mod_r_coloc_ui(id=ns("r_coloc"))
-        mod_r_coloc_server(id="r_coloc", gene_module, data_module)
+        mod_r_coloc_server(id="r_coloc", gene_module, data_module, functions=c("finemap.abf","finemap.signals"))
 
       } else if(input$grouping == "r-susieR") {
 

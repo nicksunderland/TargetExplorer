@@ -18,7 +18,7 @@ app_ui <- function(request) {
       hr(),
       fluidRow(
         column(10, mod_gene_ui(id="gene")),
-        column(1, selectInput(inputId="module_type", label="Modules", choices=c("GWAS","eQTL","Coloc","MR"), selected = "GWAS")),
+        column(1, selectInput(inputId="module_type", label="Modules", choices=c("GWAS","Coloc","MR"), selected = "GWAS")),
         column(1, actionButton(inputId="add_step", width = "40px", label = "", icon = icon("plus"))),
         tags$style(type='text/css', "#add_step { width:100%; margin-top: 25px;}")
       ),
