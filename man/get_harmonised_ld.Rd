@@ -2,9 +2,9 @@
 % Please edit documentation in R/mod_r_coloc.R
 \name{get_harmonised_ld}
 \alias{get_harmonised_ld}
-\title{Title}
+\title{get_harmonised_ld}
 \usage{
-get_harmonised_ld(dat, ref_path, chr, from, to, method)
+get_harmonised_ld(dat, ref_path, chr, from, to, method, colmap = NULL)
 }
 \arguments{
 \item{dat}{.}
@@ -23,5 +23,5 @@ get_harmonised_ld(dat, ref_path, chr, from, to, method)
 .
 }
 \description{
-Title
+get_harmonised_ld
 }

@@ -17,7 +17,7 @@ mod_source_select_ui <- function(id){
 
 #' source_select Server Functions
 #' @noRd
-mod_source_select_server <- function(id, app, source_type=c("GWAS","eQTL","Coloc","MR"), label="Source 1"){
+mod_source_select_server <- function(id, app, source_type=c("GWAS","Coloc","MR"), label="Source 1"){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
@@ -25,7 +25,8 @@ mod_source_select_server <- function(id, app, source_type=c("GWAS","eQTL","Coloc
     #==========================================
     # reactive values for this module
     #==========================================
-    v <- reactiveValues(data = NULL)
+    v <- reactiveValues(data = NULL,
+                        source_id = "")
 
 
     #==========================================
@@ -71,7 +72,8 @@ mod_source_select_server <- function(id, app, source_type=c("GWAS","eQTL","Coloc
         # add an observer to track its data to this module (which is just a alias really)
         session$userData[[ns("source_data")]] <- observeEvent(app$modules[[input$source]]$data, {
 
-          v$data <- app$modules[[input$source]]$data
+          v$data      <- app$modules[[input$source]]$data
+          v$source_id <- app$modules[[input$source]]$source_id
 
         })
 

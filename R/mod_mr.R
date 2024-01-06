@@ -25,42 +25,37 @@ mod_mr_ui <- function(id){
                                  column(6, mod_source_select_ui(ns("exposure_filter_by"))),
                                  column(6, mod_source_select_ui(ns("outcome_filter_by")))
                                ),
-                               hr(),
+                               fluidRow(
+                                 shinyjs::disabled(column(6, numericInput(inputId=ns("n_param1"), label="N", value=NA_real_, step=1))),
+                                 shinyjs::disabled(column(6, numericInput(inputId=ns("n_param2"), label="N", value=NA_real_, step=1))),
+                               ),
                                fluidRow(
                                  column(6,
                                         checkboxGroupInput(inputId = ns("mr_method"),
                                                            label   = "MR method",
                                                            choices = c("mr_wald_ratio","mr_egger_regression","mr_weighted_median",
-                                                                        "mr_ivw","mr_simple_mode", "mr_weighted_mode"),
+                                                                       "mr_ivw","mr_simple_mode", "mr_weighted_mode"),
                                                            selected= c("mr_wald_ratio", "mr_egger_regression", "mr_weighted_median",
-                                                                        "mr_ivw", "mr_simple_mode", "mr_weighted_mode"),
+                                                                       "mr_ivw", "mr_simple_mode", "mr_weighted_mode"),
                                                            inline  = FALSE)),
                                  column(6,
-                                        selectInput(inputId = ns("sens_plot_select"),
-                                                    label   = "Sensitivity plot",
-                                                    choices = c("Single SNP","Leave-one-out"),
-                                                    selected= "Single SNP"),
-                                        checkboxInput(inputId = ns("point_labels"),
-                                                      value   = TRUE,
-                                                      label   = "Labels"),
-                                        textInput(inputId = ns("exclude"),
-                                                  label   = "Exclude",
-                                                  value   = "",
-                                                  placeholder = "e.g. rs1234; rs4321"))
+                                        checkboxGroupInput(inputId = ns("mr_corr_method"),
+                                                           label   = "Correlated MR methods",
+                                                           choices = c("mr_ivw","mr_egger","mr_pcgmm"),
+                                                           selected= NULL,
+                                                           inline  = FALSE),
+                                        mod_reference_ui(id=ns("reference")))
                                ),
                                fluidRow(
-                                 column(6,
-                                        mod_reference_ui(id=ns("reference"))),
-                                 column(3,
-                                        prettyRadioButtons(inputId  = ns("mr_corr"),
-                                                           label    = "MR-corr",
-                                                           choices  = c("Corr", "Indep"),
-                                                           selected = "Indep",
-                                                           inline   = FALSE)),
-                                 column(3,
-                                        actionButton(inputId = ns("run_mr"),
-                                                     label   = "Run MR")),
-                                 tags$style(type='text/css', paste0("#",ns("run_mr")," { width:100%; margin-top: 25px;}"))
+                                 column(6, textInput(inputId=ns("exclude"), label="Exclude", value="", placeholder = "e.g. rs1234; rs4321")),
+                                 shinyjs::disabled(column(6, sliderTextInput(inputId=ns("r2thresh"), label="r2 thresh", selected=0.95, choices=c(0.001,0.01,seq(0.1,0.9,by=0.1),0.95,0.98,0.99), grid=TRUE)))
+                               ),
+                               fluidRow(
+                                 column(4, actionButton(inputId=ns("run_mr"), label="Run MR")),
+                                 column(5, selectInput(inputId=ns("sens_plot_select"), label="Sensitivity plot", choices=c("Single SNP","Leave-one-out"), selected="Single SNP")),
+                                 column(3, checkboxInput(inputId=ns("point_labels"), value=TRUE, label="Labels")),
+                                 tags$style(type='text/css', paste0("#",ns("run_mr")," { width:100%; margin-top: 25px;}")),
+                                 tags$style(type='text/css', paste0("#",ns("point_labels")," { width:100%; margin-top: 25px;}"))
                                ),
                   ), # sidebar panel end
                   mainPanel(width = 9,
@@ -74,13 +69,15 @@ mod_mr_ui <- function(id){
                               column(6,
                                      plotOutput(outputId = ns("mr_plot"),
                                                 height   = "500px",
-                                                brush    = ns("mr_plot_brush")),
+                                                brush    = ns("mr_plot_brush")))
+                            ),
+                            fluidRow(
+                              column(12,
                                      tableOutput(outputId = ns("mr_result")),
                                      tableOutput(outputId = ns("mr_egg_result"))
                               )
                             ),
                             tableOutput(outputId = ns("mr_table")),
-
                   ) # main panel end
     ), # sidebar layout end
     hr()
@@ -102,11 +99,25 @@ mod_mr_server <- function(id, app){
     #==========================================
     data_mod      <- mod_data_server(id="data", gene_module=app$modules$gene)
     remove_mod    <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
-    exposure_mod  <- mod_source_select_server(id="exposure", app=app, source_type=c("GWAS","eQTL","Coloc"), label="Exposure")
-    outcome_mod   <- mod_source_select_server(id="outcome",  app=app, source_type=c("GWAS","eQTL","Coloc"), label="Outcome")
+    exposure_mod  <- mod_source_select_server(id="exposure", app=app, source_type=c("GWAS"), label="Exposure")
+    outcome_mod   <- mod_source_select_server(id="outcome",  app=app, source_type=c("GWAS"), label="Outcome")
     reference_mod <- mod_reference_server(id="reference", label="Reference", gene_module=gene_module, enabled=FALSE)
-    exposure_filter_mod <- mod_source_select_server(id="exposure_filter_by", app=app, source_type=c("GWAS","eQTL","Coloc"), label="filter by:")
-    outcome_filter_mod  <- mod_source_select_server(id="outcome_filter_by",  app=app, source_type=c("GWAS","eQTL","Coloc"), label="filter by:")
+    exposure_filter_mod <- mod_source_select_server(id="exposure_filter_by", app=app, source_type=c("GWAS","Coloc"), label="filter by:")
+    outcome_filter_mod  <- mod_source_select_server(id="outcome_filter_by",  app=app, source_type=c("GWAS","Coloc"), label="filter by:")
+
+
+    #==========================================
+    # Correlated MR controls
+    #==========================================
+    session$userData[[ns("mr_corr_method")]] <- observeEvent(input$mr_corr_method, {
+
+      shinyjs::toggleState(id="mr_method", condition=is.null(input$mr_corr_method))
+      shinyjs::toggleState(id="r2thresh",  condition=!is.null(input$mr_corr_method))
+      shinyjs::toggleState(id="n_param1",  condition=!is.null(input$mr_corr_method))
+      shinyjs::toggleState(id="n_param2",  condition=!is.null(input$mr_corr_method))
+      shinyjs::toggleState(id="reference-reference", condition=!is.null(input$mr_corr_method))
+
+    }, ignoreNULL=FALSE)
 
 
     #==========================================
@@ -124,7 +135,7 @@ mod_mr_server <- function(id, app){
 
         # possible instrument selection steps
         # in order of how they should be used e.g. if clump and eqtl columns, then use eqtl over clump
-        iv_selection <- c("eqtl","coloc","index")
+        iv_selection <- c("index")
 
         # get type of data / filter column
         cols_1 <- names(exposure_mod$data)
@@ -176,7 +187,7 @@ mod_mr_server <- function(id, app){
           return(NULL)
         }
 
-        # custom variants to exlcude
+        # custom variants to exclude
         exclude_variants <- c("")
         if(!is.null(input$exclude) && input$exclude != "") {
 
@@ -205,7 +216,7 @@ mod_mr_server <- function(id, app){
 
         # if no matching SNPs in outcome then return NULL and warn
         matching_snps = outcome_mod$data$RSID %in% exp$SNP &
-                        outcome_mod$data$RSID %in% variants_source_2
+          outcome_mod$data$RSID %in% variants_source_2
         if(!any(matching_snps)) {
           showNotification(paste("No matching outcome SNPs for the", nrow(exp), "exposure SNPs provided"), type="error")
           return(NULL)
@@ -237,14 +248,15 @@ mod_mr_server <- function(id, app){
           #-----------------------------------------------
           # Run MR - with independent variables
           shiny::incProgress(1/n, detail = "MR analysis")
-          if(input$mr_corr == "Indep") {
+          if(is.null(input$mr_corr_method)) {
+
 
             data_mod$data2 <- TwoSampleMR::mr(data_mod$data)
 
 
           #-----------------------------------------------
           # Run MR - with correlated variables
-          } else if(input$mr_corr == "Corr") {
+          } else {
 
             # get the reference file
             if(grepl("1kGv3", reference_mod$ref_path)) {
@@ -280,6 +292,11 @@ mod_mr_server <- function(id, app){
                                                   plink_ref = plink_ref,
                                                   ukbb_ref  = ukbb_ref)
 
+            # prune highly correlated variables
+            hi_corr_idx       <- prune_hi_corr(dat_ld_obj$ld_mat, thresh=sqrt(input$r2thresh))
+            dat_ld_obj$ld_mat <- dat_ld_obj$ld_mat[-hi_corr_idx, -hi_corr_idx]
+            dat_ld_obj$dat    <- dat_ld_obj$dat[-hi_corr_idx, ]
+
             # MRInput object
             data_mod$data <- MendelianRandomization::mr_input(
               bx            = dat_ld_obj$dat$beta.exposure,
@@ -295,8 +312,81 @@ mod_mr_server <- function(id, app){
               correlation   = dat_ld_obj$ld_mat
             )
 
-            # Run all MR methods
-            data_mod$data2 <- MendelianRandomization::mr_allmethods(data_mod$data)
+            # Run MR methods
+            results <- list()
+            if("mr_ivw" %in% input$mr_corr_method) {
+
+              method <- "mr_ivw"
+
+              res <- do.call(getFromNamespace(method, "MendelianRandomization"), list(object=data_mod$data, correl=TRUE))
+              r <- data.table::data.table(nSNPs     = res@SNPs,
+                                          `High R2` = length(hi_corr_idx),
+                                          Estimate  = res@Estimate,
+                                          SE        = res@StdError,
+                                          pval      = res@Pvalue,
+                                          Fstat     = res@Fstat,
+                                          Intercept = 0)
+              results[[method]] <- r
+
+            }
+
+            if("mr_egger" %in% input$mr_corr_method) {
+
+              method <- "mr_egger"
+
+              res <- do.call(getFromNamespace(method, "MendelianRandomization"), list(object=data_mod$data, correl=TRUE))
+              r <- data.table::data.table(nSNPs     = res@SNPs,
+                                          `High R2` = length(hi_corr_idx),
+                                          Estimate  = res@Estimate,
+                                          SE        = res@StdError.Est,
+                                          pval      = res@Pvalue.Est,
+                                          Intercept = res@Intercept,
+                                          `SE-int`= res@StdError.Int,
+                                          `P-value-int`=res@Pvalue.Int)
+              results[[method]] <- r
+
+            }
+
+            if("mr_pcgmm" %in% input$mr_corr_method) {
+
+              method <- "mr_pcgmm"
+
+              # require sample size
+              if(is.na(input$n_param1) && !"N" %in% names(exposure_mod$data)) {
+                stop("Exposure sample size `N` must be provided for `mr_pcgmm`")
+              } else if(is.na(input$n_param1)) {
+                nx <- max(exposure_mod$data$N, na.rm=TRUE)
+                updateNumericInput(inputId="n_param1", value = nx)
+              } else {
+                nx <- input$n_param1
+              }
+              if(is.na(input$n_param2) && !"N" %in% names(outcome_mod$data)) {
+                stop("Outcome sample size `N` must be provided for `mr_pcgmm`")
+              } else if(is.na(input$n_param2)) {
+                ny <- max(outcome_mod$data$N, na.rm=TRUE)
+                updateNumericInput(inputId="n_param2", value = ny)
+              } else {
+                ny <- input$n_param2
+              }
+
+              res <- do.call(getFromNamespace(method, "MendelianRandomization"), list(object=data_mod$data, nx=nx, ny=ny))
+              r <- data.table::data.table(nSNPs     = nrow(res@Correlation),
+                                          `High R2` = length(hi_corr_idx),
+                                          Estimate  = res@Estimate,
+                                          SE        = res@StdError,
+                                          pval      = res@Pvalue,
+                                          Intercept = 0,
+                                          Fstat     = res@Fstat,
+                                          Overdispersion=res@Overdispersion,
+                                          PCs       = res@PCs)
+              results[[method]] <- r
+
+            }
+
+            # set results
+            results <- data.table::rbindlist(results, idcol="Method", fill=TRUE)
+            class(results) <- append("MendelianRandomization", class(results))
+            data_mod$data2 <- results
 
           }
 
@@ -330,22 +420,31 @@ mod_mr_server <- function(id, app){
       )
 
       # create the MR plot - from MendelianRandmonisation package
-      browser() # why error here
-      if(inherits(data_mod$data2, "MRAll")) {
+      if(inherits(data_mod$data, "MRInput")) {
 
-        p <- MendelianRandomization::mr_plot(data_mod$data2,
-                                             orientate = TRUE,
-                                             error = TRUE) +
+        plot_data <- data.table::data.table(SNP           = paste0(data_mod$data@snps,"_",data_mod$data@other_allele,"_",data_mod$data@effect_allele),
+                                            exposure.beta = data_mod$data@betaX,
+                                            outcome.beta  = data_mod$data@betaY,
+                                            outcome.se    = data_mod$data@betaXse,
+                                            exposure.se   = data_mod$data@betaYse)
+
+        p <- ggplot(data    = plot_data,
+                    mapping = aes(x = exposure.beta, y = outcome.beta)) +
+          geom_errorbar(mapping = aes(ymin=outcome.beta-(1.96*outcome.se), ymax=outcome.beta+(1.96*outcome.se)), width=0, color="grey") +
+          geom_errorbar(mapping = aes(xmin=exposure.beta-(1.96*exposure.se), xmax=exposure.beta+(1.96*exposure.se)), width=0, color="grey") +
+          geom_point() +
+          geom_abline(data      = data_mod$data2,
+                      mapping   = aes(intercept=Intercept, slope=Estimate, color=Method)) +
           theme_classic() +
           theme(legend.position="top")
 
         # plot labels
         if(input$point_labels) {
           p <- p +
-            geom_label_repel(data=data.frame(snps=data_mod$data2@Data@snps), aes(label=snps))
+            geom_label_repel(mapping = aes(label=SNP))
         }
 
-      # data from TwoSampleMR package
+        # data from TwoSampleMR package
       } else {
 
         p   <- TwoSampleMR::mr_scatter_plot(data_mod$data2, data_mod$data)[[1]] +
@@ -392,21 +491,8 @@ mod_mr_server <- function(id, app){
         need(!is.null(data_mod$data2), "")
       )
 
-      # from MendelianRandmonisation package
-      if(inherits(data_mod$data2, "MRAll")) {
-
-        res <- data_mod$data2@Values
-
-      # data from TwoSampleMR package
-      } else {
-
-        # clean up the results table
-        res <- data_mod$data2
-        res$pval <- formatC(res$pval, digits = 3)
-        res$id.exposure <- NULL
-        res$id.outcome  <- NULL
-
-      }
+      res <- data.table::as.data.table(data_mod$data2)
+      res[, pval := formatC(pval, digits = 3)]
 
       return(res)
     })
@@ -419,15 +505,15 @@ mod_mr_server <- function(id, app){
 
       # check data
       validate(
-        need(!is.null(data_mod$data), "")
+        need(!is.null(data_mod$data2), "")
       )
 
       # run analysis - from MendelianRandmonisation package
-      if(inherits(data_mod$data, "MRAll")) {
+      if(inherits(data_mod$data2, "MendelianRandomization")) {
 
         egg <- NULL # result lives in the main table
 
-      # data from TwoSampleMR package
+        # data from TwoSampleMR package
       } else {
 
         egg <- TwoSampleMR::mr_pleiotropy_test(data_mod$data)
@@ -458,15 +544,15 @@ mod_mr_server <- function(id, app){
       if(input$sens_plot_select=="Single SNP") {
 
         # run analysis - from MendelianRandmonisation package
-        if(inherits(data_mod$data2, "MRAll")) {
+        if(inherits(data_mod$data, "MRInput")) {
 
           p <- MendelianRandomization::mr_forest(data_mod$data,
                                                  alpha = 0.05,
                                                  snp_estimates = TRUE,
                                                  methods = "ivw",
-                                                 ordered = FALSE)
+                                                 ordered = TRUE)
 
-        # data from TwoSampleMR package
+          # data from TwoSampleMR package
         } else {
 
           res_single <- TwoSampleMR::mr_singlesnp(data_mod$data)
@@ -475,11 +561,11 @@ mod_mr_server <- function(id, app){
         }
 
 
-      # run and plot LOO SNP analysis
+        # run and plot LOO SNP analysis
       } else if(input$sens_plot_select=="Leave-one-out") {
 
         # run analysis - from MendelianRandmonisation package
-        if(inherits(data_mod$data2, "MRAll")) {
+        if(inherits(data_mod$data, "MRInput")) {
 
           p <- MendelianRandomization::mr_loo(data_mod$data, alpha = 0.05)
 
@@ -497,15 +583,6 @@ mod_mr_server <- function(id, app){
     })
 
 
-    #==========================================
-    # observe the correlation selector
-    #==========================================
-    session$userData[[ns("mr_corr")]] <- observeEvent(input$mr_corr, {
-
-      shinyjs::toggleState(id="reference-reference", condition={input$mr_corr=="Corr"})
-
-    })
-
 
 
     #==========================================
@@ -517,3 +594,33 @@ mod_mr_server <- function(id, app){
     return(data_mod)
   })
 }
+
+
+
+prune_hi_corr <- function(ld_mat, thresh=sqrt(0.95), seed=2024) {
+
+  # https://wellcomeopenresearch.org/articles/8-449
+  # threshold set to r2>0.95
+  set.seed(seed)        # for reproducibility
+  omit = NULL           # set up list of variants to be omitted
+  rho.upper = ld_mat    # correlation matrix
+  rho.upper[lower.tri(ld_mat, diag=TRUE)] <- 0
+  # only consider upper triangle of correlations
+  j=1                   # set counter to 1
+
+  while (max(abs(rho.upper), na.rm=TRUE) > thresh) {
+    omit[j] = ifelse(rbinom(1, 1, 0.5)==1,
+                     which.max(apply(abs(rho.upper), 1, max, na.rm=TRUE)),
+                     which.max(apply(abs(rho.upper), 2, max, na.rm=TRUE)))
+    # find the highest correlation value
+    # select either the row or column at random
+    # add this to the list of omitted variants
+    rho.upper[omit[j],] <- 0 # set the correlations in this row to zero
+    rho.upper[,omit[j]] <- 0 # set the correlations in this column to zero
+    # (to avoid selecting the same variant again)
+    j=j+1                # increment the counter
+  }  # stop when no more pairwise correlations exceed threshold
+
+  return(omit)
+}
+

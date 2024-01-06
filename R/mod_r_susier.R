@@ -85,7 +85,7 @@ mod_r_susier_ui <- function(id){
 
 #' r_susier Server Functions
 #' @noRd
-mod_r_susier_server <- function(id, gene_module, data_module){
+mod_r_susier_server <- function(id, gene_module, data_module, parent_ui=NULL){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
@@ -157,10 +157,18 @@ mod_r_susier_server <- function(id, gene_module, data_module){
 
         shiny::withProgress(message = 'Finemapping data', value = 0, {
 
-          shiny::incProgress(1/4, detail = paste("Processing", input$`filter-dataset`, "..."))
-
           # finemap.abf
           if(input$func == "susie_rss") {
+
+            shiny::incProgress(1/4, detail = "susie_rss")
+
+            # reset if previously run
+            if(any(c("group","index") %in% names(data_module$data))) {
+
+              data_module$data$group <- NULL
+              data_module$data$index <- NULL
+
+            }
 
             # get the reference file
             if(grepl("1kGv3", reference_mod$ref_path)) {
@@ -218,18 +226,31 @@ mod_r_susier_server <- function(id, gene_module, data_module){
                                          coverage = input$coverage,
                                          max_iter = input$max_iter)
 
-            # update the data with grouping
-            data_module$data <- calc_credible_set(result      = results,
-                                                  dat_join_to = data_module$data,
-                                                  coverage    = input$coverage,
-                                                  result_type = "susie_rss")
-
             # store data for the kriging_rss plot
-            data_module$kriging_rss         <- susieR::kriging_rss(D1$beta/(D1$varbeta ^ 0.5), D1$LD, n=D1$N)$conditional_dist
-            data_module$kriging_rss$RSID    <- D1$snp
-            data_module$kriging_rss$outlier <- ifelse(data_module$kriging_rss$logLR  > 2 &
-                                                      abs(data_module$kriging_rss$z) > 2, TRUE, FALSE)
+            if(!is.null(parent_ui) && parent_ui$sensitivity_plot()=="Kriging plot") {
+              data_module$kriging_rss         <- susieR::kriging_rss(D1$beta/(D1$varbeta ^ 0.5), D1$LD, n=D1$N)$conditional_dist
+              data_module$kriging_rss$RSID    <- D1$snp
+              data_module$kriging_rss$outlier <- ifelse(data_module$kriging_rss$logLR  > 2 &
+                                                          abs(data_module$kriging_rss$z) > 2, TRUE, FALSE)
+            } else {
+              data_module$kriging_rss <- NULL
+            }
 
+            # extract the sets if converged
+            if(!results$converged) {
+              stop("susieR did not converge - inspect the kriging_rss plot and try increasing number of iterations")
+            }
+            cred_sets <- susieR::susie_get_cs(results, Xcorr = D1$LD, coverage = input$coverage)
+            cred_sets <- unlist(stats::setNames(cred_sets$cs, paste0(names(cred_sets$cs),"_")))
+            cs_dt <- data.table::data.table(var_idx=c(cred_sets), set=names(cred_sets))
+            cs_dt[, group := factor(sub("L([0-9]+)_.*","\\1",set))]
+            cs_dt[, index := ifelse(seq_len(.N)==1,TRUE,FALSE), by="group"]
+            cs_dt[, RSID := dat_ld_obj[["dat"]][cs_dt$var_idx, RSID]]
+
+            # update the data with grouping
+            updated_dat <- data_module$data[cs_dt, c("group","index") := list(group,index), on="RSID"]
+            data_module$data <- NULL # force memory location change for reactives
+            data_module$data <- updated_dat
 
           }
 
@@ -246,7 +267,9 @@ mod_r_susier_server <- function(id, gene_module, data_module){
       },
       error=function(e) {
 
-        showNotification(paste0(input$func, " failed - ", e), type="error", duration = 10)
+        data_module$data$group <- NULL
+        data_module$data$index <- NULL
+        showNotification(paste0(input$func, " failed - ", e), type="error", duration = 30)
         return(NULL)
 
       }) # end tryCatch

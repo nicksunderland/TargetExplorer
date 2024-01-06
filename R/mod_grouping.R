@@ -25,7 +25,7 @@ mod_grouping_ui <- function(id){
 
 #' grouping Server Functions
 #' @noRd
-mod_grouping_server <- function(id, gene_module, data_module){
+mod_grouping_server <- function(id, gene_module, data_module, parent_ui){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
@@ -66,17 +66,21 @@ mod_grouping_server <- function(id, gene_module, data_module){
       } else if(input$grouping == "plink::clump") {
 
         controls <- mod_clump_ui(id=ns("clump"))
-        mod_clump_server(id="clump", gene_module, data_module)
+        mod_clump_server(id="clump", gene_module=gene_module, data_module=data_module)
 
       } else if(input$grouping == "r-coloc") {
 
         controls <- mod_r_coloc_ui(id=ns("r_coloc"))
-        mod_r_coloc_server(id="r_coloc", gene_module, data_module, functions=c("finemap.abf","finemap.signals"))
+        mod_r_coloc_server(id              = "r_coloc",
+                           gene_module     = gene_module,
+                           source_1_module = data_module,
+                           parent_ui       = parent_ui,
+                           functions       = c("finemap.abf","finemap.signals"))
 
       } else if(input$grouping == "r-susieR") {
 
         controls <- mod_r_susier_ui(id=ns("r_susier"))
-        mod_r_susier_server(id="r_susier", gene_module, data_module)
+        mod_r_susier_server(id="r_susier", gene_module, data_module, parent_ui=parent_ui)
 
       }
 

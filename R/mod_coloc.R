@@ -24,27 +24,21 @@ mod_coloc_ui <- function(id){
                                ),
                                hr(),
                                fluidRow(
-                                 column(4, p(strong("Colocalisation:"), style="text-align:right; margin-top: 6px;")),
+                                 column(4, p(strong("Colocalisation:"), style="text-align:left; margin-top: 6px;")),
                                  column(8,
                                         selectInput(inputId  = ns("package_select"),
                                                     label    = NULL,
-                                                    choices  = c("Off","Common variants","r-coloc","r-susieR"),
+                                                    choices  = c("Off","basic","r-coloc"),
                                                     selected = "Off"))
                                ),
-                               uiOutput(ns("package_ui")),
-                               fluidRow(
-                                 column(4, p(strong("Output data:"), style="text-align:left; margin-top: 6px;")),
-                                 column(8,
-                                        selectInput(inputId = ns("downstream_dataset"),
-                                                    label   = NULL,
-                                                    choices = c("Dataset 1", "Dataset 2")))
-                               )
+                               uiOutput(ns("package_ui"))
                   ), # sidebar panel end
                   mainPanel(width = 9,
                             fluidRow(
-                              column(9, p(strong("Colocalisation:"))),
+                              column(8, p(strong("Colocalisation:"))),
                               column(1, p(strong("Sensitivity:"), style="text-align:left; margin-top: 6px;")),
-                              column(2, selectInput(inputId = ns("sensitivity_plot"), label=NULL, choices = c("Off","test"), selected = "Off"))
+                              column(2, selectInput(inputId = ns("sensitivity_plot"), label=NULL, choices = c("Off","Kriging plot","Probabilities"), selected = "Off")),
+                              column(1, numericInput(inputId=ns("plot_num"),label=NULL,value=1,step=1,min=1,max=1))
                             ),
                             # Locus zoom plot
                             uiOutput(outputId = ns("plot_area")),
@@ -75,6 +69,22 @@ mod_coloc_server <- function(id, app){
 
 
     #==========================================
+    # Reactive values
+    #==========================================
+    v <- reactiveValues(sensitivity_plot = reactive(input$sensitivity_plot))
+
+
+    #==========================================
+    # Observe changes in source data, invalidate coloc data if reloaded
+    #==========================================
+    session$userData[[ns("source_input")]] <- observeEvent(list(source_1_mod$data, source_2_mod$data), {
+
+      data_mod$data  <- NULL
+
+    })
+
+
+    #==========================================
     # Package select input - render package UI
     #==========================================
     output$package_ui <- renderUI({
@@ -83,22 +93,25 @@ mod_coloc_server <- function(id, app){
 
         controls <- fluidRow()
         data_mod$data  <- NULL
-        data_mod$data2 <- NULL
 
-      } else if(input$package_select == "Common variants") {
+      } else if(input$package_select == "basic") {
 
-        controls <- fluidRow(p("TODO"))
+        controls <- mod_basic_coloc_ui(id=ns("basic_coloc"))
+        mod_basic_coloc_server(id = "basic_coloc",
+                               source_1_module = source_1_mod,
+                               source_2_module = source_2_mod,
+                               data_module     = data_mod)
 
       } else if(input$package_select == "r-coloc") {
 
         controls <- mod_r_coloc_ui(id=ns("r_coloc"))
-        mod_r_coloc_server(id="r_coloc", gene_module=app$modules$gene, data_module=data_mod, functions=c("coloc.abf","coloc.signals","coloc.susie"))
-
-      } else if(input$package_select == "r-susieR") {
-
-        controls <- fluidRow(p("TODO"))
-        # controls <- mod_r_susier_ui(id=ns("r_susier"))
-        # mod_r_susier_server(id="r_susier", gene_module=app$modules$gene, data_module=data_mod)
+        mod_r_coloc_server(id              = "r_coloc",
+                           gene_module     = app$modules$gene,
+                           source_1_module = source_1_mod,
+                           source_2_module = source_2_mod,
+                           data_module     = data_mod,
+                           parent_ui       = v,
+                           functions       = c("coloc.abf","coloc.signals","coloc.susie"))
 
       }
 
@@ -135,21 +148,21 @@ mod_coloc_server <- function(id, app){
         need(!is.null(source_1_mod$data) | !is.null(source_2_mod$data), 'No data imported for either dataset')
       )
 
-      # colours
-      color_list = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
-
       # base plot
       p <- ggplot() +
         theme_classic() +
         lims(x = c(app$modules$gene$start - app$modules$gene$flanks_kb*1000, app$modules$gene$end + app$modules$gene$flanks_kb*1000)) +
         labs(x = paste0("Chromosome ", app$modules$gene$chr, " position"),
-             y = expression(paste("-log"[10], plain(P)))) +
+             y = expression(paste("-log"[10], plain(P))),
+             subtitle = paste0("Upper: ", source_1_mod$source_id, " / Lower: ", source_2_mod$source_id)) +
         theme(legend.position="top")
 
       # y axis max and min
       y_max <- c(NA_real_, NA_real_)
 
-      # plot source 1 data positive
+
+      #--------------------------------------------
+      # PLOT SOURCE 1
       if(!is.null(source_1_mod$data)) {
 
         y_max[[1]] <- max(source_1_mod$data$nlog10P, na.rm=TRUE)
@@ -157,64 +170,17 @@ mod_coloc_server <- function(id, app){
         p <- p +
           annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=0, ymax=Inf, fill="blue", alpha = 0.05)
 
-        # add downstream label if UI indicates
-        if(input$downstream_dataset=="Dataset 1") {
-          p <- p +
-            annotate(geom = "text", x=app$modules$gene$end+(app$modules$gene$flanks_kb*1000)-1e4, y=ceiling(y_max[[1]]), label="downstream", color="darkred", alpha=0.5)
-        }
-
-        # FINEMAPPING SOURCE 1 - plot the points
-        if(!is.null(data_mod$data) && data_mod$source == "Dataset 1" && input$downstream_dataset == "Dataset 1") {
-
-          p <- p +
-            geom_point(data    = data_mod$data,
-                       mapping = aes(x=BP, y=nlog10P, color=PP), shape=19) +
-            geom_point(data    = data_mod$data[which(coloc==TRUE), ],
-                       mapping = aes(x=BP, y=nlog10P, fill=credible_set), stroke=NA, shape=24, size=3) +
-            viridis::scale_color_viridis(option="magma") +
-            geom_label_repel(data    = data_mod$data[which(coloc==TRUE), ],
-                             mapping = aes(label=RSID, x=BP, y=nlog10P),
-                             max.overlaps = Inf) +
-            labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
-
-          # COLOC SOURCE 1 - plot the points
-        } else if(!is.null(data_mod$data) && data_mod$source == "Coloc") {
-
-          # if data_mod$source == "Coloc"
-          # data_mod$data is either the upstream source 1 or source 2, with the joined coloc data - extra cols:
-          # PP<num>, coloc<lgl>, credible_set<fct>
-
-          # join to data source
-          plot_data <- source_1_mod$data[data_mod$data[, list(RSID,PP,coloc,credible_set)], on="RSID"]
-          plot_data[source_2_mod$data, nlog10P_lower := i.nlog10P, on="RSID"]
-
-          p <- p +
-            geom_point(data    = plot_data,
-                       mapping = aes(x=BP, y=nlog10P, color=PP), shape=19) +
-            geom_segment(data    = plot_data[which(coloc==TRUE), ],
-                         mapping = aes(x=BP,xend=BP,y=nlog10P,yend=-nlog10P_lower), linetype="dotted", color="darkred") +
-            geom_point(data    = plot_data[which(coloc==TRUE), ],
-                       mapping = aes(x=BP, y=nlog10P, fill=credible_set), stroke=NA, shape=24, size=3) +
-            viridis::scale_color_viridis(option="magma") +
-            geom_label_repel(data    = plot_data[which(coloc==TRUE), ],
-                             mapping = aes(label=RSID, x=BP, y=nlog10P),
-                             max.overlaps = Inf) +
-            labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
-
-
-          # RAW SOURCE 1 - plot the points
-        } else {
-
-          p <- p +
-            geom_point(data    = source_1_mod$data,
-                       mapping = aes(x=BP, y=nlog10P),
-                       color   = "lightgray")
-
-        }
+        # plot the points
+        p <- p +
+          geom_point(data    = source_1_mod$data,
+                     mapping = aes(x=BP, y=nlog10P),
+                     color   = "lightgray")
 
       }
 
-      # plot source 2 data negative
+
+      #--------------------------------------------
+      # PLOT SOURCE 2
       if(!is.null(source_2_mod$data)) {
 
         y_max[[2]] <- max(source_2_mod$data$nlog10P, na.rm=TRUE)
@@ -222,64 +188,56 @@ mod_coloc_server <- function(id, app){
         p <- p +
           annotate(geom = "rect", xmin=app$modules$gene$start, xmax=app$modules$gene$end, ymin=-Inf, ymax=0, fill="blue", alpha = 0.05)
 
-        # add downstream label if UI indicates
-        if(input$downstream_dataset=="Dataset 2") {
-          p <- p +
-            annotate(geom = "text", x=app$modules$gene$end+(app$modules$gene$flanks_kb*1000)-1e4, y=-ceiling(y_max[[2]]), label="downstream", color="darkred", alpha=0.5)
-        }
-
-        # FINEMAPPING SOURCE 2 - plot the points
-        if(!is.null(data_mod$data) && data_mod$source == "Dataset 2" &&  input$downstream_dataset == "Dataset 2") {
-
-          p <- p +
-            geom_point(data    = data_mod$data,
-                       mapping = aes(x=BP, y=-nlog10P, color=PP), shape=19) +
-            geom_point(data    = data_mod$data[which(coloc==TRUE), ],
-                       mapping = aes(x=BP, y=-nlog10P, fill=credible_set), stroke=NA, shape=24, size=3) +
-            viridis::scale_color_viridis(option="magma") +
-            geom_label_repel(data    = data_mod$data[which(coloc==TRUE), ],
-                             mapping = aes(label=RSID, x=BP, y=-nlog10P),
-                             max.overlaps = Inf) +
-            labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
-
-          # COLOC SOURCE 2 - plot the points
-        } else if(!is.null(data_mod$data) && data_mod$source == "Coloc") {
-
-          # if data_mod$source == "Coloc"
-          # data_mod$data is either the upstream source 1 or source 2, with the joined coloc data - extra cols:
-          # PP<num>, coloc<lgl>, credible_set<fct>
-
-          # join to data source
-          plot_data <- source_2_mod$data[data_mod$data[, list(RSID,PP,coloc,credible_set)], on="RSID"]
-
-          p <- p +
-            geom_point(data    = plot_data,
-                       mapping = aes(x=BP, y=-nlog10P, color=PP), shape=19) +
-            geom_point(data    = plot_data[which(coloc==TRUE), ],
-                       mapping = aes(x=BP, y=-nlog10P, fill=credible_set), stroke=NA, shape=24, size=3) +
-            viridis::scale_color_viridis(option="magma") +
-            labs(color="PP", fill=paste0(input$credible_set_p*100,"% credible sets"))
-
-
-          # RAW SOURCE 2 - plot the points
-        } else {
-
-          p <- p +
+        # plot the points
+        p <- p +
             geom_point(data    = source_2_mod$data,
                        mapping = aes(x=BP, y=-nlog10P),
                        color   = "darkgray")
+      }
+
+
+      #--------------------------------------------
+      # PLOT COLOC results
+      if(!is.null(data_mod$data)) {
+
+        # details if less than 50 labels
+        if(sum(data_mod$data$index, na.rm=T) < 25) {
+
+          p <- p +
+            labs(color = "Coloc pair") +
+            # color the index variants
+            geom_point(data       = data_mod$data[index==TRUE, ],
+                       mapping    = aes(x=BP_1, y= nlog10P_1, color=group), size = 3, shape = 1, stroke = 2) +
+            geom_point(data       = data_mod$data[index==TRUE, ],
+                       mapping    = aes(x=BP_2, y=-nlog10P_2, color=group), size = 3, shape = 1, stroke = 2) +
+            # connecting lines between hits
+            geom_segment(data     = data_mod$data[index==TRUE, ],
+                         mapping  = aes(x=BP_1, y=nlog10P_1, xend=BP_2, yend=-nlog10P_2),
+                         linetype = "dotted", color="red") +
+            # labels
+            geom_label_repel(data = data_mod$data[index==TRUE, ],
+                             mapping= aes(label=paste0(group,": ", RSID_1), x=BP_1, y=nlog10P_1)) +
+            geom_label_repel(data = data_mod$data[index==TRUE, ],
+                             mapping= aes(label=paste0(group,": ", RSID_2), x=BP_2, y=-nlog10P_2))
+
+        } else {
+
+          p <- p +
+            geom_point(data       = data_mod$data[index==TRUE, ],
+                       mapping    = aes(x=BP_1, y= nlog10P_1), color="red", shape=17) +
+              geom_point(data       = data_mod$data[index==TRUE, ],
+                         mapping    = aes(x=BP_2, y=-nlog10P_2), color="red", shape=17)
 
         }
+
       }
 
-      # if two sets of data
+      #--------------------------------------------
+      # TIDY UP PLOT
+      # if two sets of data - draw the x-axis at y=0
       if(!is.null(source_1_mod$data) && !is.null(source_2_mod$data)) {
-
-        # draw the x-axis at y=0
         p <- p + geom_hline(yintercept = 0)
-
       }
-
       # correct P values on the Y axis
       p <- p +
         scale_y_continuous(breaks =     seq(ifelse(is.na(y_max[[2]]), 0, -ceiling(y_max[[2]])),
@@ -287,7 +245,8 @@ mod_coloc_server <- function(id, app){
                            labels = abs(seq(ifelse(is.na(y_max[[2]]), 0, -ceiling(y_max[[2]])),
                                             ifelse(is.na(y_max[[1]]), 0,  ceiling(y_max[[1]])), 1)))
 
-
+      #--------------------------------------------
+      # Return the final resut
       return(p)
     })
 
@@ -297,9 +256,9 @@ mod_coloc_server <- function(id, app){
     #==========================================
     output$locus_plot_table <- renderTable({
 
-      req(data_mod$data2$summary)
+      req(data_mod$summary_table)
 
-      return(t(as.data.frame(data_mod$data2$summary)))
+      return(data_mod$summary_table)
 
     })
 
@@ -317,18 +276,50 @@ mod_coloc_server <- function(id, app){
 
 
       #--------------------------------------------
-      # XXXXXXXXXX
-      if(input$sensitivity_plot == "testing") {
+      # Kriging plot for LD reference vs study fit
+      if(input$sensitivity_plot == "Kriging plot") {
 
-        p <- NULL
+        validate(
+          need(!is.null(data_mod$kriging_rss), 'No Kriging plot data - (re-)run coloc'),
+        )
 
-      } else if(input$sensitivity_plot == "foo") {
+        plotlist <- list()
 
-        p <- genepi.utils::plot_coloc_probabilities(data_mod$data2, rule=paste0("H4 > ", input$coloc_h4), type="prior")
+        for(data_name in c("kriging_rss","kriging_rss2")) {
 
-      } else if(input$sensitivity_plot == "bar") {
+          if(is.null(data_mod[[data_name]])) next
 
-        p <- genepi.utils::plot_coloc_probabilities(data_mod$data2, rule=paste0("H4 > ", input$coloc_h4), type="posterior")
+          p0 <- ggplot(data   = data_mod[[data_name]],
+                      mapping = aes(x=condmean, y=z)) +
+            geom_abline(intercept = 0, slope = 1) +
+            geom_point(mapping = aes(color=outlier)) +
+            geom_label_repel(data = data_mod[[data_name]][data_mod[[data_name]]$outlier==TRUE, ],
+                             mapping = aes(label=RSID), max.overlaps = Inf) +
+            scale_color_manual(values = c("TRUE"="red", "FALSE"="darkgrey"), labels=c("TRUE"="Outlier","FALSE"="Within tolerance"), drop=FALSE) +
+            theme_classic() +
+            labs(y = "Observed z scores", x = "Expected value") +
+            theme(legend.position = "top",
+                  legend.title = element_blank())
+
+          plotlist <- c(plotlist, list(p0))
+        }
+
+        p <- ggpubr::ggarrange(plotlist = plotlist, ncol = 1)
+
+
+      #--------------------------------------------
+      # Probability sensitive plots
+      } else if(input$sensitivity_plot == "Probabilities") {
+
+        validate(
+          need(!is.null(data_mod$coloc_prob_prior) && !is.null(data_mod$coloc_prob_post), 'No Kriging plot data - run coloc.signals with `cond` option, or coloc.susie'),
+        )
+
+        updateNumericInput(inputId="plot_num",max=length(data_mod$coloc_prob_prior))
+
+        p <- ggpubr::ggarrange(data_mod$coloc_prob_prior[[input$plot_num]],
+                               data_mod$coloc_prob_post[[input$plot_num]],
+                               ncol = 1)
 
       }
 
@@ -365,112 +356,7 @@ mod_coloc_server <- function(id, app){
 # #==========================================
 # session$userData[[ns("run")]] <- observeEvent(input$run, {
 #
-#   # catch coloc package warnings and print as notifications
-#   tryCatch({
-#
-#     # DATASET 1 FINEMAP
-#     if(input$method=="Finemap" && input$assumption == "Single" && input$downstream_dataset == "Dataset 1" && !is.null(source_1_mod$data)) {
-#
-#       # make and check the dataset
-#       D1 <- make_coloc_dataset(dat  = source_1_mod$data,
-#                                type = input$source_1_type,
-#                                sdY  = input$sd_y1,
-#                                ld   = NULL)
-#
-#       # run the coloc finemap function
-#       data_mod$data2$results <- coloc::finemap.abf(D1, p1=input$coloc_p1)
-#       data_mod$source <- "Dataset 1"
-#       data_mod$data  <- calc_credible_set(rsids          = data_mod$data2$results$snp,
-#                                           snp.pp         = data_mod$data2$results$SNP.PP,
-#                                           dat_join_to    = data.table::copy(source_1_mod$data),
-#                                           credible_set_p = input$credible_set_p)
-#
-#       # DATASET 1 SuSiE - finemap
-#     } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 1" && !is.null(source_1_mod$data)) {
-#
-#       # get the reference file
-#       plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
-#                                    chrom    = app$modules$gene$chr,
-#                                    from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-#                                    to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
-#
-#       # create the LD matrix for the region variants
-#       dat_ld_obj <- genepi.utils::ld_matrix(variants     = source_1_mod$data,
-#                                             with_alleles = TRUE,
-#                                             plink2       = get_plink2_exe(),
-#                                             plink_ref    = plink_ref)
-#
-#       # make and check the dataset 1
-#       D1 <- make_coloc_dataset(dat  = dat_ld_obj[["dat"]],
-#                                type = input$source_1_type,
-#                                sdY  = input$sd_y1,
-#                                ld   = dat_ld_obj[["ld_mat"]])
-#
-#       # run SuSie
-#       data_mod$data2  <- coloc::runsusie(D1, coverage=input$credible_set_p)
-#       data_mod$data2$kriging_rss <- susieR::kriging_rss(D1$beta/(D1$varbeta ^ 0.5), dat_ld_obj[["ld_mat"]], n=D1$N)$conditional_dist
-#       data_mod$data2$kriging_rss$RSID <- D1$snp
-#       data_mod$data2$kriging_rss$outlier <- ifelse(data_mod$data2$kriging_rss$logLR  > 2 &
-#                                                      abs(data_mod$data2$kriging_rss$z) > 2, TRUE, FALSE)
-#       data_mod$source <- "Dataset 1"
-#       data_mod$data   <- calc_credible_set(rsids          = names(data_mod$data2$pip),
-#                                            snp.pp         = data_mod$data2$pip,
-#                                            dat_join_to    = data.table::copy(source_1_mod$data),
-#                                            credible_sets  = data_mod$data2$sets$cs,
-#                                            credible_set_p = NULL)
-#
-#       # DATASET 2 FINEMAP
-#     } else if(input$method=="Finemap" && input$assumption == "Single" && input$downstream_dataset == "Dataset 2" && !is.null(source_2_mod$data)) {
-#
-#       # make and check the dataset
-#       D2 <- make_coloc_dataset(dat  = source_2_mod$data,
-#                                type = input$source_2_type,
-#                                sdY  = input$sd_y2,
-#                                ld   = NULL)
-#
-#       # run the coloc finemap function
-#       data_mod$data2$results <- coloc::finemap.abf(D2, p1=input$coloc_p1)
-#       data_mod$source <- "Dataset 2"
-#       data_mod$data  <- calc_credible_set(rsids          = data_mod$data2$results$snp,
-#                                           snp.pp         = data_mod$data2$results$SNP.PP,
-#                                           dat_join_to    = data.table::copy(source_1_mod$data),
-#                                           credible_set_p = input$credible_set_p)
-#
-#       # DATASET 2 SuSiE - finemap
-#     } else if(input$method=="Finemap" && input$assumption == "SuSiE" && input$downstream_dataset == "Dataset 2" && !is.null(source_2_mod$data)) {
-#
-#       # get the reference file
-#       plink_ref <- make_ref_subset(ref_path = reference_mod$ref_path,
-#                                    chrom    = app$modules$gene$chr,
-#                                    from     = app$modules$gene$start - app$modules$gene$flanks_kb*1000,
-#                                    to       = app$modules$gene$end + app$modules$gene$flanks_kb*1000)
-#
-#       # create the LD matrix for the region variants
-#       dat_ld_obj <- genepi.utils::ld_matrix(variants     = source_2_mod$data,
-#                                             with_alleles = TRUE,
-#                                             plink2       = get_plink2_exe(),
-#                                             plink_ref    = plink_ref)
-#
-#       # make and check the dataset 1
-#       D2 <- make_coloc_dataset(dat  = dat_ld_obj[["dat"]],
-#                                type = input$source_2_type,
-#                                sdY  = input$sd_y2,
-#                                ld   = dat_ld_obj[["ld_mat"]])
-#
-#       # run SuSie
-#       data_mod$data2  <- coloc::runsusie(D2, coverage=input$credible_set_p)
-#       data_mod$data2$kriging_rss <- susieR::kriging_rss(D2$beta/(D2$varbeta ^ 0.5), dat_ld_obj[["ld_mat"]], n=D2$N)$conditional_dist
-#       data_mod$data2$kriging_rss$RSID <- D2$snp
-#       data_mod$data2$kriging_rss$outlier <- ifelse(data_mod$data2$kriging_rss$logLR  > 2 &
-#                                                      abs(data_mod$data2$kriging_rss$z) > 2, TRUE, FALSE)
-#       data_mod$source <- "Dataset 2"
-#       data_mod$data   <- calc_credible_set(rsids          = names(data_mod$data2$pip),
-#                                            snp.pp         = data_mod$data2$pip,
-#                                            dat_join_to    = data.table::copy(source_2_mod$data),
-#                                            credible_sets  = data_mod$data2$sets$cs,
-#                                            credible_set_p = NULL)
-#
-#
+
 #       # DATASET 1&2 COLOC
 #     } else if(input$method=="Coloc" && input$assumption == "Single" && !is.null(source_1_mod$data) && !is.null(source_2_mod$data)) {
 #
@@ -500,7 +386,7 @@ mod_coloc_server <- function(id, app){
 #                               p12 = input$coloc_p12)
 #
 #       # assign the results
-#       data_mod$data2 <- res
+#       data_mod$data <- res
 #       data_mod$source <- "Coloc"
 #
 #       # populate data_mod$data with whichever dataset we plan on feeding downstream
@@ -513,8 +399,8 @@ mod_coloc_server <- function(id, app){
 #         dat_join_to = source_2_mod$data
 #
 #       }
-#       data_mod$data <- calc_credible_set(rsids          = data_mod$data2$results$snp,
-#                                          snp.pp         = data_mod$data2$results$SNP.PP.H4,
+#       data_mod$data <- calc_credible_set(rsids          = data_mod$data$results$snp,
+#                                          snp.pp         = data_mod$data$results$SNP.PP.H4,
 #                                          dat_join_to    = dat_join_to,
 #                                          credible_set_p = input$credible_set_p)
 #
@@ -583,7 +469,7 @@ mod_coloc_server <- function(id, app){
 #       #
 #       #
 #       # # assign the results
-#       # data_mod$data2 <- res
+#       # data_mod$data <- res
 #       # data_mod$source <- "Coloc"
 #       #
 #       # # populate data_mod$data with whichever dataset we plan on feeding downstream
@@ -596,8 +482,8 @@ mod_coloc_server <- function(id, app){
 #       #   dat_join_to = source_2_mod$data
 #       #
 #       # }
-#       # data_mod$data <- calc_credible_set(rsids          = data_mod$data2$results$snp,
-#       #                                    snp.pp         = data_mod$data2$results$SNP.PP.H4,
+#       # data_mod$data <- calc_credible_set(rsids          = data_mod$data$results$snp,
+#       #                                    snp.pp         = data_mod$data$results$SNP.PP.H4,
 #       #                                    dat_join_to    = dat_join_to,
 #       #                                    credible_set_p = input$credible_set_p)
 #       #

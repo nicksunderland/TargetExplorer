@@ -48,18 +48,24 @@ mod_gwas_server <- function(id, app){
 
 
     #==========================================
+    # Reactive values
+    #==========================================
+    v <- reactiveValues(sensitivity_plot = reactive(input$sensitivity_plot))
+
+
+    #==========================================
     # Data, clump, and remove (sub)module servers for the GWAS module
     #==========================================
     data_mod     <- mod_data_server(id="data", gene_module=app$modules$gene)
-    grouping_mod <- mod_grouping_server(id="grouping", gene_module=app$modules$gene, data_module=data_mod)
+    grouping_mod <- mod_grouping_server(id="grouping", gene_module=app$modules$gene, data_module=data_mod, parent_ui=v)
     remove_mod   <- mod_remove_server(id="remove", app=app, parent_id=id, parent_inputs=input)
-    sensitivity_source_mod <- mod_source_select_server(id="sensitivity_source", app=app, source_type=c("GWAS","eQTL","Coloc"), label=NULL)
+    sensitivity_source_mod <- mod_source_select_server(id="sensitivity_source", app=app, source_type=c("GWAS"), label=NULL)
 
 
     #==========================================
     # Observe the grouping input
     #==========================================
-    observeEvent(list(grouping_mod$grouping, data_mod$source), {
+    session$userData[[ns("grouping_input")]] <- observeEvent(list(grouping_mod$grouping, data_mod$source), {
 
       req(grouping_mod$grouping)
       req(data_mod$source)
@@ -308,7 +314,7 @@ mod_gwas_server <- function(id, app){
      } else if(input$sensitivity_plot == "Kriging plot") {
 
        validate(
-         need(!is.null(data_mod$kriging_rss), 'No Kriging plot data - run finemapping'),
+         need(!is.null(data_mod$kriging_rss), 'No Kriging plot data - run finemap.signals with `cond` option'),
        )
 
        p <- ggplot(data    = data_mod$kriging_rss,

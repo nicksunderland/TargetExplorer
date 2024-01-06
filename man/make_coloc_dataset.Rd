@@ -14,7 +14,7 @@ make_coloc_dataset(
 )
 }
 \arguments{
-\item{dat}{a data.table, with at least columns c("RSID","EA","OA","BP","BETA","SE") +/- c("EAF","N"),}
+\item{dat}{a data.table, with at least columns c("RSID","BP","BETA","SE") +/- c("EAF","N"), #"EA","OA",}
 
 \item{type}{a string, either c("quant","cc")}
 
