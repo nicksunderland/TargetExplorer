@@ -9,7 +9,6 @@
 #'
 mod_clump_ui <- function(id){
   ns <- NS(id)
-  cli::cli_alert_info(paste0("initialising mod_clump_ui(ns=",ns("foo"),")"))
   tagList(
     fluidRow(
       column(6,
@@ -58,7 +57,6 @@ mod_clump_ui <- function(id){
 mod_clump_server <- function(id, gene_module, data_module){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    cli::cli_alert_info(paste0("initialising mod_gwas_server(ns=",ns("foo"),")"))
 
     # R CMD checks
     BP <- BP_END <- BP_START <- GENE_NAME <- RSID <- clump <- log10P <- SNP <- index <- nlog10P <- NULL

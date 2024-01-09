@@ -39,7 +39,7 @@ mod_gene_ui <- function(id){
                              step    = 1000)),
       column(2, numericInput(inputId = ns("flanks_kb"),
                              label   = "Flanks-kb",
-                             value   = 250,
+                             value   = 100,
                              min     = 0,
                              max     = 1000)),
       column(2, prettyRadioButtons(

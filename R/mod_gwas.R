@@ -78,6 +78,7 @@ mod_gwas_server <- function(id, app){
 
       sensitivity_plot_choices <- switch(grouping_mod$grouping,
                                          "Off"          = c("Off", source_specific_plots),
+                                         "Simple"       = c("Off", "Clump exp-out corr", source_specific_plots),
                                          "plink::clump" = c("Off", "LD structure", "Clump exp-out corr", source_specific_plots),
                                          "r-coloc"      = c("Off", "LD structure", "Kriging plot", source_specific_plots),
                                          "r-susieR"     = c("Off", "LD structure", "Kriging plot", source_specific_plots))

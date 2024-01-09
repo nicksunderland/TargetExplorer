@@ -1014,8 +1014,8 @@ coloc_to_plotting <- function(result, h4=0.5, coverage=0.95) {
   summary <- unique(summary, by="uid")
 
   if(nrow(summary)==0) {
-    summary[, group := factor(step)]
-    summary[, index := factor(step)] # empty
+    summary[, group := factor(0)]
+    summary[, index := logical(0)] # empty
   } else {
     summary[, group := factor(step, labels=1:length(unique(step)))]
     summary[, index := TRUE]

@@ -12,10 +12,10 @@ mod_grouping_ui <- function(id){
   tagList(
     fluidRow(
       column(3, p(strong("Grouping:"), style="text-align:right; margin-top: 6px;")),
-      column(9,
+      column(6,
              selectInput(inputId  = ns("grouping"),
                          label    = NULL,
-                         choices  = c("Off","plink::clump","r-coloc","r-susieR"),
+                         choices  = c("Off","simple","plink::clump","r-coloc","r-susieR"),
                          selected = "Off"))
     ),
     uiOutput(ns("grouping_controls"))
@@ -62,6 +62,50 @@ mod_grouping_server <- function(id, gene_module, data_module, parent_ui){
           data_module$data$index <- NULL
 
         }
+
+      } else if(input$grouping == "simple") {
+
+        controls <- fluidRow(
+          column(6, selectInput(inputId=ns("selection"), label="Select", choices=c("Off","All index","All group 1"), selected="Off"))
+        )
+
+        session$userData[[ns("data_update")]] <- observeEvent(data_module$data, {
+
+          if("TISSUE" %in% names(data_module$data)) {
+            current <- input$selection
+            updateSelectInput(inputId = "selection", selected = current, choices =c("Off","All index","All group 1","TISSUE") )
+          }
+
+        })
+
+        session$userData[[ns("selection")]] <- observeEvent(input$selection, {
+
+          req(input$selection)
+          req(data_module$data)
+
+          if(input$selection=="Off"){
+            if(any(c("group","index") %in% names(data_module$data))){
+              data_module$data$group <- NULL
+              data_module$data$index <- NULL
+            }
+          } else if(input$selection=="All index") {
+            tmp <- data_module$data[,index:=TRUE]
+            data_module$data <- NULL
+            data_module$data <- tmp
+          } else if(input$selection=="All group 1") {
+            tmp <- data_module$data[,group:=factor(1)]
+            data_module$data <- NULL
+            data_module$data <- tmp
+          } else{
+
+            tmp <- data_module$data[,group:=factor(get(input$selection))]
+            data_module$data <- NULL
+            data_module$data <- tmp
+          }
+
+        })
+
+
 
       } else if(input$grouping == "plink::clump") {
 
