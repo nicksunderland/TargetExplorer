@@ -80,6 +80,11 @@ read_internal_data <- function(type, dataset, chrom, start, end, pthresh) {
     # read the needed rows
     d <- chr_fst[row_idxs, ]
 
+    # TODO: reproduce all the internal datasets with trait and ID columns
+    d$ID <- dataset
+    d$TRAIT <- dataset
+    # TODO
+
     # standardise data.frame
     d <- standardise_data(d, source="internal")
 

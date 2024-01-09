@@ -24,19 +24,19 @@ standardise_data <- function(dat, source, build_from=NULL, build_to=NULL) {
   if(source=="ebi_eqtl_api") {
 
     col_map <- c(RSID="rsid", CHR="chromosome", BP="position", EA="alt", OA="ref", EAF="maf", BETA="beta",SE="se", P="pvalue", N="N",
-                 GENE_ID="gene_id", STUDY="STUDY", TISSUE="TISSUE", QUANT_METHOD="QUANT_METHOD", TPM="median_tpm")
+                 GENE_ID="gene_id", STUDY="STUDY", TISSUE="TISSUE", QUANT_METHOD="QUANT_METHOD", TPM="median_tpm",TRAIT="TRAIT", ID="ID")
 
   } else if(source=="internal") {
 
-    col_map <- c(RSID="RSID", CHR="CHR", BP="BP", EA="EA", OA="OA", EAF="EAF", BETA="BETA", SE="SE", P="P", N="N")
+    col_map <- c(RSID="RSID", CHR="CHR", BP="BP", EA="EA", OA="OA", EAF="EAF", BETA="BETA", SE="SE", P="P", N="N",TRAIT="TRAIT", ID="ID")
 
   } else if(source=="ieu_opengwas") {
 
-    col_map <- c(RSID="rsid", CHR="chr", BP="position", EA="ea", OA="nea", EAF="eaf", BETA="beta", SE="se", P="p", N="n", TRAIT="trait")
+    col_map <- c(RSID="rsid", CHR="chr", BP="position", EA="ea", OA="nea", EAF="eaf", BETA="beta", SE="se", P="p", N="n", TRAIT="trait", ID="id")
 
   } else if(source=="ebi_gwas") {
 
-    col_map <- c(RSID="variant_id", CHR="chromosome", BP="base_pair_location", EA="effect_allele", OA="other_allele", EAF="effect_allele_frequency", BETA="beta", SE="se", OR="odds_ratio", OR_LR="ci_lower", OR_UR="ci_upper", P="p_value", TRAIT="trait")
+    col_map <- c(RSID="variant_id", CHR="chromosome", BP="base_pair_location", EA="effect_allele", OA="other_allele", EAF="effect_allele_frequency", BETA="beta", SE="se", OR="odds_ratio", OR_LR="ci_lower", OR_UR="ci_upper", P="p_value", TRAIT="trait", ID="study_accession")
 
   }
 
@@ -68,6 +68,12 @@ standardise_data <- function(dat, source, build_from=NULL, build_to=NULL) {
              is.finite(SE) &
              P < 1 &
              P > 0, ]
+
+  # final check on minimum required standardised column names being present
+  std_col_names <- c("RSID","CHR","BP","EA","OA","EAF","BETA","SE","P","N","TRAIT","ID")
+  if(!all(std_col_names %in% names(dat))) {
+    stop(paste0(c("Import standardisation error - minimum data columns not found. Missing:", std_col_names[which(!std_col_names %in% names(dat))]), collapse=" "))
+  }
 
   # return standardised data
   return(dat)

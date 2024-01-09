@@ -78,6 +78,8 @@ import_ebi_eqtl <- function(study_info_table,
         responses[, STUDY        := dataset_ids[dataset_ids$dataset_id==id, "catalogue"]]
         responses[, TISSUE       := dataset_ids[dataset_ids$dataset_id==id, "dataset"]]
         responses[, QUANT_METHOD := dataset_ids[dataset_ids$dataset_id==id, "quant_method"]]
+        responses[, ID           := paste0(STUDY,"-",TISSUE,"-",QUANT_METHOD)]
+        responses[, TRAIT        := paste0("eQTL-",gene_id,"-",TISSUE)]
         responses <- responses[pvalue <= pthresh, ]
 
         # update progress

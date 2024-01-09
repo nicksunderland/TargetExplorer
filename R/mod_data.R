@@ -214,8 +214,6 @@ mod_data_server <- function(id, gene_module){
       # OpenGWAS API
       } else if(input$data_source=="IEU Open GWAS") {
 
-        v$source_id <- input$filter_gwas
-
         v$data <- import_ieu_gwas(study_id = input$filter_gwas,
                                   chr      = gene_module$chr,
                                   bp_start = gene_module$start - gene_module$flanks_kb*1000,
@@ -241,8 +239,6 @@ mod_data_server <- function(id, gene_module){
       # EBI GWAS catalogue API
       } else if(input$data_source=="EBI GWAS Catalogue") {
 
-        v$source_id <- input$filter_gwas
-
         v$data <- import_ebi_gwas(study_id = input$filter_gwas,
                                   chr      = gene_module$chr,
                                   bp_start = gene_module$start - gene_module$flanks_kb*1000,
@@ -253,8 +249,6 @@ mod_data_server <- function(id, gene_module){
 
       # EBI eQTL catalogue API
       } else if(input$data_source=="EBI eQTL Catalogue") {
-
-        v$source_id <- paste0(input$`filter-dataset`, collapse = ", ")
 
         v$data <- import_ebi_eqtl(study_info_table = v$info,
                                   studies  = input$`filter-catalogue`,
@@ -276,8 +270,6 @@ mod_data_server <- function(id, gene_module){
       # Internal file
       } else if(input$data_source=="Local") {
 
-        v$source_id <- paste0(input$`filter-dataset`, collapse = ", ")
-
         v$data <- read_internal_data(type    = input$`filter-catalogue`,
                                      dataset = input$`filter-dataset`,
                                      chrom   = gene_module$chr,
@@ -293,7 +285,6 @@ mod_data_server <- function(id, gene_module){
       }
 
     })
-
 
     # return the reactive data module values
     return(v)

@@ -17,7 +17,10 @@ mod_source_select_ui <- function(id){
 
 #' source_select Server Functions
 #' @noRd
-mod_source_select_server <- function(id, app, source_type=c("GWAS","Coloc","MR"), label="Source 1"){
+mod_source_select_server <- function(id, app,
+                                     source_type = c("GWAS","Coloc","MR"),
+                                     label       = "Source 1",
+                                     multiple    = FALSE) {
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
@@ -35,9 +38,14 @@ mod_source_select_server <- function(id, app, source_type=c("GWAS","Coloc","MR")
     output$source_select_ui <- renderUI({
 
       # create the selectInput
-      s <- selectInput(inputId = ns("source"),
-                       label   = label,
-                       choices = c("-"))
+      s <- selectizeInput(inputId = ns("source"),
+                          label   = label,
+                          choices = c(""),
+                          selected= "",
+                          multiple= multiple,
+                          options = list(plugins = list("remove_button"),
+                                         allowEmptyOption = TRUE,
+                                         persist = TRUE))
 
       # add an observer listening for changes to the app modules (has an init call to populate the initial UI element)
       session$userData[[ns("app-modules")]] <- observeEvent(app$modules, {
@@ -52,9 +60,12 @@ mod_source_select_server <- function(id, app, source_type=c("GWAS","Coloc","MR")
         selected <- input$source
 
         # update the selectInput
-        updateSelectInput(inputId = "source", choices = c("-", select_module_ids), selected = selected)
+        updateSelectizeInput(inputId = "source", choices = c("", select_module_ids), selected = selected)
 
       })
+
+
+
 
       # return the UI element
       return(s)
@@ -66,16 +77,21 @@ mod_source_select_server <- function(id, app, source_type=c("GWAS","Coloc","MR")
     #==========================================
     session$userData[[ns("source")]] <- observeEvent(input$source, {
 
-      # if there is an input data source
-      if(!is.null(input$source) && !is.null(app$modules[[input$source]])) {
+      # if there is a single valid input data source
+      if(!is.null(input$source) && !all(sapply(input$source, function(x) x==""))) {
 
-        # add an observer to track its data to this module (which is just a alias really)
-        session$userData[[ns("source_data")]] <- observeEvent(app$modules[[input$source]]$data, {
+        # TODO: work out how to make reactive without crashing when deselecting multiple selectize
+        # # add an observer to track its data to this module (which is just a alias really)
+        # session$userData[[ns("source_data")]] <- observeEvent(app$modules[[input$source]]$data, {
+        v$data <- lapply(input$source, function(id) {
 
-          v$data      <- app$modules[[input$source]]$data
-          v$source_id <- app$modules[[input$source]]$source_id
+          if(!is.null(app$modules[[id]])) {
 
-        })
+            return(app$modules[[id]]$data)
+
+          }
+
+        }) |> data.table::rbindlist(fill=TRUE)
 
       }
 
